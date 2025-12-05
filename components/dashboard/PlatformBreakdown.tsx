@@ -1,23 +1,14 @@
 'use client';
 
 import { NetWorthDashboardSummary } from '@/lib/apiClient';
-import { ArrowRight, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { PLATFORM_COLORS } from '@/lib/constants';
 
 interface PlatformBreakdownProps {
     summary: NetWorthDashboardSummary | null;
     isLoading: boolean;
 }
-
-const PLATFORM_COLORS: Record<string, string> = {
-    'Degiro': 'bg-blue-600',
-    'Trading212 ISA': 'bg-emerald-500',
-    'EQ (GSK shares)': 'bg-rose-500',
-    'InvestEngine ISA': 'bg-orange-500',
-    'Crypto': 'bg-purple-500',
-    'HL Stocks & Shares LISA': 'bg-sky-500',
-    'Cash': 'bg-teal-500',
-};
 
 export function PlatformBreakdown({ summary, isLoading }: PlatformBreakdownProps) {
     if (isLoading || !summary) {
@@ -68,10 +59,12 @@ export function PlatformBreakdown({ summary, isLoading }: PlatformBreakdownProps
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="font-bold text-white text-sm">£{p.value.toLocaleString()}</div>
-                                    <div className={`text-xs font-medium flex items-center justify-end ${p.month_change_amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                        {p.month_change_amount >= 0 ? '+' : ''}£{p.month_change_amount.toFixed(0)}
-                                        <span className="opacity-80 ml-1">({p.month_change_percent.toFixed(1)}%)</span>
+                                    <div className="text-white font-bold">
+                                        £{p.value.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                                    </div>
+                                    <div className={`text-xs font-medium ${p.month_change_amount >= 0 ? 'text-green-500' : 'text-red-500'
+                                        }`}>
+                                        {p.month_change_amount >= 0 ? '+' : ''}£{Math.abs(p.month_change_amount).toLocaleString('en-GB', { maximumFractionDigits: 0 })} ({p.month_change_percent.toFixed(1)}%)
                                     </div>
                                 </div>
                             </div>

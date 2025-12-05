@@ -123,13 +123,50 @@ class ApiClient {
         return this.request<any>('/net-worth/monthly-tracker');
     }
 
+
     // Holdings
     async getHoldings() {
         return this.request<Record<string, Investment[]>>('/holdings/');
     }
 
+    async updateInvestment(id: number, updates: Partial<Investment>) {
+        return this.request<Investment>(`/holdings/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates),
+        });
+    }
+
+    async deleteInvestment(id: number) {
+        return this.request<{ status: string }>(`/holdings/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
     async getPlatformCash(platform: string) {
         return this.request<PlatformCash>(`/holdings/cash/${platform}`);
+    }
+
+    async updatePlatformCash(platform: string, amount: number) {
+        return this.request<PlatformCash>(`/holdings/cash/${platform}`, {
+            method: 'POST',
+            body: JSON.stringify({ cash_balance: amount }),
+        });
+    }
+
+    async renamePlatform(oldName: string, newName: string) {
+        return this.request<any>(`/holdings/platform/rename?old_name=${encodeURIComponent(oldName)}&new_name=${encodeURIComponent(newName)}`, {
+            method: 'POST',
+        });
+    }
+
+    async updatePlatformColor(platform: string, color: string) {
+        return this.request<any>(`/holdings/platform/color?platform=${encodeURIComponent(platform)}&color=${encodeURIComponent(color)}`, {
+            method: 'POST',
+        });
+    }
+
+    async getPlatformColors() {
+        return this.request<Record<string, string>>('/holdings/platform/colors');
     }
 
     // Goals
@@ -143,6 +180,37 @@ class ApiClient {
             body: JSON.stringify(goal),
         });
     }
+
+    async updateGoal(id: number, updates: Partial<Goal>) {
+        return this.request<Goal>(`/goals/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(updates),
+        });
+    }
+
+    async deleteGoal(id: number) {
+        return this.request<void>(`/goals/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
+    // Cashflow (Income vs Investment)
+    async getIncomeData() {
+        return this.request<IncomeData[]>('/cashflow/income');
+    }
+
+    async updateIncomeData(year: string, income: number, investment: number) {
+        return this.request<IncomeData>(`/cashflow/income?year=${encodeURIComponent(year)}&income=${income}&investment=${investment}`, {
+            method: 'POST',
+        });
+    }
+}
+
+export interface IncomeData {
+    year: string;
+    income: number;
+    investment: number;
+    created_at?: string;
 }
 
 export const api = new ApiClient();
