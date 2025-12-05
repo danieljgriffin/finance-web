@@ -1,65 +1,148 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useState } from 'react';
+import { api, NetWorthDashboardSummary, Goal } from '@/lib/apiClient';
+import { NetWorthCard } from '@/components/dashboard/NetWorthCard';
+import { PlatformBreakdown } from '@/components/dashboard/PlatformBreakdown';
+import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
+
+export default function Dashboard() {
+  const [summary, setSummary] = useState<NetWorthDashboardSummary | null>(null);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadHistory(range: string, currentNetWorth: number) {
+    try {
+      if (range === '24H') {
+        const data = await api.getIntradayHistory(24);
+        if (data && data.length > 0) {
+          setChartData(data);
+        } else {
+          // Fallback to flat line if no data yet (until cron/snapshot runs)
+          const now = new Date();
+          const startDate = new Date();
+          startDate.setHours(now.getHours() - 24);
+          setChartData([
+            { date: startDate.toISOString(), value: currentNetWorth },
+            { date: now.toISOString(), value: currentNetWorth }
+          ]);
+        }
+      } else if (range === '1W') {
+        const data = await api.getIntradayHistory(168);
+        if (data && data.length > 0) {
+          setChartData(data);
+        } else {
+          // Fallback
+          const now = new Date();
+          const startDate = new Date();
+          startDate.setDate(now.getDate() - 7);
+          setChartData([
+            { date: startDate.toISOString(), value: currentNetWorth },
+            { date: now.toISOString(), value: currentNetWorth }
+          ]);
+        }
+      } else if (range === 'Max') {
+        const historyData = await api.getNetWorthHistory('all');
+        setChartData((historyData as any).map((d: any) => ({
+          date: d.date || d.month,
+          value: d.value || d.total_networth || 0
+        })));
+      } else {
+        // 1Y or Default
+        // Map ranges to monthly granularity for now if not intraday
+        const historyData = await api.getNetWorthHistory(new Date().getFullYear());
+        setChartData((historyData as any).map((d: any) => ({
+          date: d.date || d.month,
+          value: d.value || d.total_networth || 0
+        })));
+      }
+    } catch (e) {
+      console.error("Failed to load history", e);
+    }
+  }
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true);
+        // In a real app we'd verify auth here or redirect
+
+        const [summaryData, goalsData] = await Promise.all([
+          api.getDashboardSummary(),
+          api.getGoals()
+        ]);
+
+        setSummary(summaryData);
+        setGoals(goalsData);
+
+        // Default to 24H view
+        if (summaryData) {
+          try {
+            const intraday = await api.getIntradayHistory(24);
+            if (intraday && intraday.length > 0) {
+              setChartData(intraday);
+            } else {
+              // Synthetic fallback
+              const now = new Date();
+              const yesterday = new Date(now);
+              yesterday.setHours(now.getHours() - 24);
+              setChartData([
+                { date: yesterday.toISOString(), value: summaryData.total_networth },
+                { date: now.toISOString(), value: summaryData.total_networth }
+              ]);
+            }
+          } catch (e) {
+            console.error("Failed initial history load", e);
+          }
+        }
+
+      } catch (err) {
+        console.error("Failed to fetch dashboard data", err);
+        setError("Failed to load dashboard data. Please check if backend is running.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  if (error) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-red-500 text-xl font-bold mb-2">Error</h2>
+        <p className="text-slate-400">{error}</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="grid grid-cols-12 gap-6 h-[calc(100vh-6rem)]">
+      {/* Main Panel (Net Worth + Chart) - Spans 6 columns (50%) */}
+      <div className="col-span-12 lg:col-span-6 h-full">
+        <NetWorthCard
+          summary={summary}
+          chartData={chartData}
+          isLoading={isLoading}
+          onTimeRangeChange={(range) => summary && loadHistory(range, summary.total_networth)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
+
+      {/* Breakdown Panel - Spans 3 columns (25%) */}
+      <div className="col-span-12 lg:col-span-3 h-full">
+        <PlatformBreakdown summary={summary} isLoading={isLoading} />
+      </div>
+
+      {/* Goals Panel - Spans 3 columns (25%) */}
+      <div className="col-span-12 lg:col-span-3 h-full">
+        <GoalsWidget
+          goals={goals}
+          isLoading={isLoading}
+          currentNetWorth={summary?.total_networth || 0}
+        />
+      </div>
     </div>
   );
 }

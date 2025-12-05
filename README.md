@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Finance Web
+
+A modern Next.js frontend for the WealthTracker stack.
+
+## Tech Stack
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Charts**: Recharts
+- **Icons**: Lucide React
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18+
+- `finance-api` running locally on port 8000 (default)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Installation
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1.  Navigate to the directory:
+    ```bash
+    cd finance-web
+    ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3.  Configure environment:
+    - Copy `.env.example` to `.env.local` (if provided) or create `.env.local`:
+    ```env
+    NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    ```
+    *(Note: Default is set to localhost:8000 in code fallback)*
 
-## Learn More
+### Running Locally
 
-To learn more about Next.js, take a look at the following resources:
+1.  Start the **backend** (finance-api):
+    ```bash
+    cd ../finance-api
+    uvicorn app.main:app --reload
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2.  Start the **frontend**:
+    ```bash
+    npm run dev
+    ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3.  Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `app/`: App Router pages and layouts.
+  - `page.tsx`: Dashboard
+  - `investments/`: Investment manager
+  - `tracker/`: Monthly/Yearly tracker
+  - `goals/`: Goals management
+- `components/`: Shared React components.
+  - `dashboard/`: Dashboard-specific widgets (Charts, Stats).
+  - `investments/`: Investment-specific components.
+  - `Navbar.tsx`: Main navigation.
+- `lib/`: Utilities and API clients.
+  - `apiClient.ts`: Typed fetch wrapper for finance-api.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Auth Note
+Currently, the app assumes a simplified auth flow. The `apiClient.ts` checks for an `access_token` in `localStorage`, but for local dev with no auth enforced on GET endpoints (if user_id is stubbed/mocked), it should work out of the box. If the API requires auth, you will need to manually set `localStorage.setItem('access_token', 'YOUR_TOKEN')` or implement the login page.
