@@ -8,9 +8,10 @@ import { PLATFORM_COLORS } from '@/lib/constants';
 interface PlatformBreakdownProps {
     summary: NetWorthDashboardSummary | null;
     isLoading: boolean;
+    isPrivacyMode: boolean;
 }
 
-export function PlatformBreakdown({ summary, isLoading }: PlatformBreakdownProps) {
+export function PlatformBreakdown({ summary, isLoading, isPrivacyMode }: PlatformBreakdownProps) {
     if (isLoading || !summary) {
         return (
             <div className="bg-[#0B101B] border border-slate-800 rounded-2xl p-6 h-full animate-pulse" />
@@ -18,13 +19,6 @@ export function PlatformBreakdown({ summary, isLoading }: PlatformBreakdownProps
     }
 
     // Use the platforms array from the new API response structure if available
-    // The service returns `platforms` list with change data now.
-    // We need to type check since `NetWorthDashboardSummary` might not be updated in TS types file yet?
-    // Let's assume passed `summary` conforms to updated interface or fallback.
-    // For now, based on previous step, I updated the API but not the TS interface. 
-    // I should update the interface too, but will rely on 'any' casting if needed or `platforms` property existing.
-
-    // Let's grab the platforms array safely
     const platformsData = (summary as any).platforms || [];
     // Sort by value desc
     const sortedPlatforms = [...platformsData].sort((a: any, b: any) => b.value - a.value);
@@ -59,11 +53,11 @@ export function PlatformBreakdown({ summary, isLoading }: PlatformBreakdownProps
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-white font-bold">
+                                    <div className={`text-white font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
                                         £{p.value.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
                                     </div>
                                     <div className={`text-xs font-medium ${p.month_change_amount >= 0 ? 'text-green-500' : 'text-red-500'
-                                        }`}>
+                                        } ${isPrivacyMode ? 'blur-sm' : ''}`}>
                                         {p.month_change_amount >= 0 ? '+' : ''}£{Math.abs(p.month_change_amount).toLocaleString('en-GB', { maximumFractionDigits: 0 })} ({p.month_change_percent.toFixed(1)}%)
                                     </div>
                                 </div>

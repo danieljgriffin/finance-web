@@ -1,119 +1,67 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api, NetWorthDashboardSummary, Goal } from '@/lib/apiClient';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/apiClient';
 import { NetWorthCard } from '@/components/dashboard/NetWorthCard';
 import { PlatformBreakdown } from '@/components/dashboard/PlatformBreakdown';
 import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
 
 export default function Dashboard() {
-  const [summary, setSummary] = useState<NetWorthDashboardSummary | null>(null);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [timeRange, setTimeRange] = useState('24H');
+  const [isPrivacyMode, setIsPrivacyMode] = useState(false);
 
-  async function loadHistory(range: string, currentNetWorth: number) {
-    try {
-      if (range === '24H') {
-        const data = await api.getIntradayHistory(24);
-        if (data && data.length > 0) {
-          setChartData(data);
-        } else {
-          // Fallback to flat line if no data yet (until cron/snapshot runs)
-          const now = new Date();
-          const startDate = new Date();
-          startDate.setHours(now.getHours() - 24);
-          setChartData([
-            { date: startDate.toISOString(), value: currentNetWorth },
-            { date: now.toISOString(), value: currentNetWorth }
-          ]);
-        }
-      } else if (range === '1W') {
-        const data = await api.getIntradayHistory(168);
-        if (data && data.length > 0) {
-          setChartData(data);
-        } else {
-          // Fallback
-          const now = new Date();
-          const startDate = new Date();
-          startDate.setDate(now.getDate() - 7);
-          setChartData([
-            { date: startDate.toISOString(), value: currentNetWorth },
-            { date: now.toISOString(), value: currentNetWorth }
-          ]);
-        }
-      } else if (range === 'Max') {
-        const historyData = await api.getNetWorthHistory('all');
-        setChartData((historyData as any).map((d: any) => ({
-          date: d.date || d.month,
-          value: d.value || d.total_networth || 0
-        })));
-      } else {
-        // 1Y or Default
-        // Map ranges to monthly granularity for now if not intraday
-        const historyData = await api.getNetWorthHistory(new Date().getFullYear());
-        setChartData((historyData as any).map((d: any) => ({
-          date: d.date || d.month,
-          value: d.value || d.total_networth || 0
-        })));
-      }
-    } catch (e) {
-      console.error("Failed to load history", e);
-    }
+  // 1. Dashboard Summary
+  const { data: summary, isLoading: isLoadingSummary, isError } = useQuery({
+    queryKey: ['dashboardSummary'],
+    queryFn: () => api.getDashboardSummary(),
+  });
+
+  // 2. Goals
+  const { data: goals, isLoading: isLoadingGoals } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => api.getGoals(),
+    initialData: [],
+  });
+
+  // 3. Chart Data (Depends on Time Range)
+  const { data: rawChartData, isLoading: isLoadingChart } = useQuery({
+    queryKey: ['chart', timeRange],
+    queryFn: () => api.getGraphData(timeRange),
+    // Refresh every minute for 24H view?
+    refetchInterval: timeRange === '24H' ? 60000 : undefined,
+  });
+
+  // Transform / Fallback logic for chart
+  const currentNetWorth = summary?.total_networth || 0;
+  let chartData: { date: string; value: number }[] = [];
+
+  if (rawChartData && rawChartData.length > 0) {
+    chartData = rawChartData.map((d: any) => ({
+      date: d.date || d.month || d.timestamp,
+      value: d.value || d.total_networth || 0
+    }));
+  } else if (!isLoadingChart && (timeRange === '24H' || timeRange === '1W')) {
+    // Fallback if API returns empty for short periods (new user)
+    const now = new Date();
+    const startStr = timeRange === '24H'
+      ? new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    chartData = [
+      { date: startStr, value: currentNetWorth },
+      { date: now.toISOString(), value: currentNetWorth }
+    ];
   }
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setIsLoading(true);
-        // In a real app we'd verify auth here or redirect
+  // NetWorthCard takes isLoading, let's pass general loading there likely.
+  const errorMessage = isError ? "Failed to load dashboard data." : null;
 
-        const [summaryData, goalsData] = await Promise.all([
-          api.getDashboardSummary(),
-          api.getGoals()
-        ]);
-
-        setSummary(summaryData);
-        setGoals(goalsData);
-
-        // Default to 24H view
-        if (summaryData) {
-          try {
-            const intraday = await api.getIntradayHistory(24);
-            if (intraday && intraday.length > 0) {
-              setChartData(intraday);
-            } else {
-              // Synthetic fallback
-              const now = new Date();
-              const yesterday = new Date(now);
-              yesterday.setHours(now.getHours() - 24);
-              setChartData([
-                { date: yesterday.toISOString(), value: summaryData.total_networth },
-                { date: now.toISOString(), value: summaryData.total_networth }
-              ]);
-            }
-          } catch (e) {
-            console.error("Failed initial history load", e);
-          }
-        }
-
-      } catch (err) {
-        console.error("Failed to fetch dashboard data", err);
-        setError("Failed to load dashboard data. Please check if backend is running.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
-
-  if (error) {
+  if (errorMessage) {
     return (
       <div className="text-center py-20">
         <h2 className="text-red-500 text-xl font-bold mb-2">Error</h2>
-        <p className="text-slate-400">{error}</p>
+        <p className="text-slate-400">{errorMessage}</p>
       </div>
     )
   }
@@ -125,22 +73,29 @@ export default function Dashboard() {
         <NetWorthCard
           summary={summary}
           chartData={chartData}
-          isLoading={isLoading}
-          onTimeRangeChange={(range) => summary && loadHistory(range, summary.total_networth)}
+          isLoading={isLoadingSummary || isLoadingChart} // Show loading on card if chart is updating
+          onTimeRangeChange={setTimeRange} // Now updates state -> triggers query
+          isPrivacyMode={isPrivacyMode}
+          onTogglePrivacy={() => setIsPrivacyMode(!isPrivacyMode)}
         />
       </div>
 
       {/* Breakdown Panel - Spans 3 columns (25%) */}
       <div className="col-span-12 lg:col-span-3 h-full">
-        <PlatformBreakdown summary={summary} isLoading={isLoading} />
+        <PlatformBreakdown
+          summary={summary}
+          isLoading={isLoadingSummary}
+          isPrivacyMode={isPrivacyMode}
+        />
       </div>
 
       {/* Goals Panel - Spans 3 columns (25%) */}
       <div className="col-span-12 lg:col-span-3 h-full">
         <GoalsWidget
           goals={goals}
-          isLoading={isLoading}
+          isLoading={isLoadingGoals}
           currentNetWorth={summary?.total_networth || 0}
+          isPrivacyMode={isPrivacyMode}
         />
       </div>
     </div>

@@ -115,6 +115,92 @@ export function EditPlatformModal({ platformName, isOpen, onClose, onSave }: Edi
                         </button>
                     </div>
                 </form>
+
+                {/* Trading212 Auto-Sync Section */}
+                {platformName === 'Trading212 ISA' && (
+                    <div className="mt-6 pt-6 border-t border-slate-800">
+                        <h3 className="text-sm font-bold text-white mb-4">Auto-Sync Settings</h3>
+                        <Trading212SyncSettings />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function Trading212SyncSettings() {
+    const [enabled, setEnabled] = useState(false);
+    const [apiKeyId, setApiKeyId] = useState('');
+    const [apiSecretKey, setApiSecretKey] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [statusMsg, setStatusMsg] = useState('');
+
+    useEffect(() => {
+        // Check current status
+        fetch('http://localhost:8000/holdings/config/trading212')
+            .then(res => res.json())
+            .then(data => setEnabled(data.enabled))
+            .catch(err => console.error(err));
+    }, []);
+
+    const handleSaveConfig = async () => {
+        setIsLoading(true);
+        setStatusMsg('');
+        try {
+            const res = await fetch('http://localhost:8000/holdings/config/trading212', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_key_id: apiKeyId,
+                    api_secret_key: apiSecretKey
+                })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                setStatusMsg('Saved & Enabled!');
+                setEnabled(true);
+                setApiKeyId(''); // Clear for security
+                setApiSecretKey('');
+            } else {
+                setStatusMsg('Error saving config');
+            }
+        } catch (e) {
+            setStatusMsg('Network error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Enable Background Sync (Every 15s)</span>
+                <div className={`w-3 h-3 rounded-full ${enabled ? 'bg-green-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-600'}`} />
+            </div>
+
+            <div className="space-y-3">
+                <input
+                    type="text"
+                    placeholder="New API Key ID (Optional)"
+                    value={apiKeyId}
+                    onChange={(e) => setApiKeyId(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+                />
+                <input
+                    type="password"
+                    placeholder="New API Secret Key (Optional)"
+                    value={apiSecretKey}
+                    onChange={(e) => setApiSecretKey(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+                />
+                <button
+                    onClick={handleSaveConfig}
+                    disabled={isLoading || !apiKeyId || !apiSecretKey}
+                    className="w-full py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isLoading ? 'Encrypting & Saving...' : 'Enable Auto-Sync'}
+                </button>
+                {statusMsg && <p className="text-xs text-center text-emerald-400">{statusMsg}</p>}
             </div>
         </div>
     );

@@ -20,7 +20,7 @@ export function InvestmentSummaryCard({ totalValue, totalSpent }: InvestmentSumm
                     <div className="text-3xl font-bold text-white mb-1">
                         £{totalValue.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Portfolio Value</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Investment Value</div>
                 </div>
 
                 {/* Total Spent */}

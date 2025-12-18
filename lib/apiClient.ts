@@ -57,6 +57,12 @@ export interface MonthlyTrackerData {
     platform_breakdown: Record<string, number>;
 }
 
+export interface HistoricalDataPoint {
+    date: string;
+    value: number;
+    platform_breakdown?: Record<string, number>;
+}
+
 class ApiClient {
     private getHeaders() {
         const headers: Record<string, string> = {
@@ -108,7 +114,15 @@ class ApiClient {
     }
 
     async getNetWorthHistory(year: number | 'all') {
-        return this.request<any>(`/net-worth/history/${year}`);
+        return this.request<HistoricalDataPoint[]>(`/net-worth/history/${year}`);
+    }
+
+    async getGraphData(period: string) {
+        return this.request<HistoricalDataPoint[]>(`/net-worth/graph-data?period=${period}`);
+    }
+
+    async getNetWorthHistoryMonths(months: number) {
+        return this.request<HistoricalDataPoint[]>(`/net-worth/history/range/months?months=${months}`);
     }
 
     async getIntradayHistory(hours: number) {
@@ -127,6 +141,13 @@ class ApiClient {
     // Holdings
     async getHoldings() {
         return this.request<Record<string, Investment[]>>('/holdings/');
+    }
+
+    async addInvestment(investment: any) {
+        return this.request<Investment>('/holdings/', {
+            method: 'POST',
+            body: JSON.stringify(investment),
+        });
     }
 
     async updateInvestment(id: number, updates: Partial<Investment>) {
@@ -162,6 +183,16 @@ class ApiClient {
     async updatePlatformColor(platform: string, color: string) {
         return this.request<any>(`/holdings/platform/color?platform=${encodeURIComponent(platform)}&color=${encodeURIComponent(color)}`, {
             method: 'POST',
+        });
+    }
+
+    async importTrading212(apiKeyId: string, apiSecretKey: string) {
+        return this.request<any>('/holdings/import/trading212', {
+            method: 'POST',
+            body: JSON.stringify({
+                api_key_id: apiKeyId,
+                api_secret_key: apiSecretKey
+            }),
         });
     }
 

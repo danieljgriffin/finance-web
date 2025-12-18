@@ -8,9 +8,10 @@ interface GoalsWidgetProps {
     goals: Goal[];
     isLoading: boolean;
     currentNetWorth: number;
+    isPrivacyMode: boolean;
 }
 
-export function GoalsWidget({ goals, isLoading, currentNetWorth }: GoalsWidgetProps) {
+export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }: GoalsWidgetProps) {
     if (isLoading) {
         return <div className="bg-[#0B101B] border border-slate-800 rounded-2xl p-6 h-full animate-pulse" />;
     }
@@ -53,7 +54,10 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth }: GoalsWidgetPr
             {/* Main Goal Progress */}
             <div className="mb-8">
                 <div className="text-sm text-slate-400 mb-4">
-                    £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })} by {targetDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                    <span className={isPrivacyMode ? "blur-sm" : ""}>
+                        £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                    </span>
+                    {' '}by {targetDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
                 </div>
 
                 <div className="flex justify-between items-end mb-2">
@@ -70,10 +74,14 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth }: GoalsWidgetPr
 
                 <div className="flex justify-between items-center text-sm">
                     <div>
-                        <div className="text-blue-400 font-bold">£{currentNetWorth.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</div>
+                        <div className={`text-blue-400 font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
+                            £{currentNetWorth.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                        </div>
                     </div>
                     <div className="text-right">
-                        <div className="text-white font-bold">£{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</div>
+                        <div className={`text-white font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
+                            £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -85,7 +93,9 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth }: GoalsWidgetPr
                 </div>
                 <div>
                     <div className="text-xs text-slate-500 uppercase mb-1">Amount Remaining</div>
-                    <div className="text-2xl font-bold text-white">£{remainingAmount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</div>
+                    <div className={`text-2xl font-bold text-white ${isPrivacyMode ? 'blur-sm' : ''}`}>
+                        £{remainingAmount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                    </div>
                 </div>
             </div>
 
@@ -101,7 +111,7 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth }: GoalsWidgetPr
                                         {new Date(goal.target_date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
                                     </div>
                                 </div>
-                                <div className="font-bold text-slate-200">
+                                <div className={`font-bold text-slate-200 ${isPrivacyMode ? 'blur-sm' : ''}`}>
                                     £{goal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
                                 </div>
                             </div>

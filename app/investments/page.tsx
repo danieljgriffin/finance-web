@@ -1,80 +1,104 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Investment } from '@/lib/apiClient';
 import { InvestmentPlatformCard } from '@/components/investments/InvestmentPlatformCard';
 import { InvestmentSummaryCard } from '@/components/investments/InvestmentSummaryCard';
 import { EditInvestmentModal } from '@/components/investments/EditInvestmentModal';
 import { EditPlatformModal } from '@/components/investments/EditPlatformModal';
+import { AddInvestmentModal } from '@/components/investments/AddInvestmentModal';
 
 export default function InvestmentsPage() {
-    const [holdings, setHoldings] = useState<Record<string, Investment[]> | null>(null);
-    const [platformCash, setPlatformCash] = useState<Record<string, number>>({});
-    const [customColors, setCustomColors] = useState<Record<string, string>>({});
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
 
-    // Edit Modal State
+    // 1. Fetch Holdings
+    const { data: holdings, isLoading: isLoadingHoldings, isError, error } = useQuery({
+        queryKey: ['holdings'],
+        queryFn: () => api.getHoldings(),
+    });
+
+
+    // 3. Fetch Cash (Dependent on Holdings)
+    // We fetch ALL cash for platforms found in holdings.
+    // Ideally use useQueries, but for simplicity/speed let's use a side-effect fetch or a composite query.
+    // A better pattern: generic "fetch all platform cash" query if API supported it.
+    // For now, let's keep the cash loading simple: fetch in standard useEffect when holdings change, 
+    // OR use useQuery for each platform. 
+    // Let's stick to state for cash for this iteration to minimize breaking changes, 
+    // but trigger it from holdings data presence.
+
+    // Better: useQueries? 
+    // const results = useQueries({
+    //    queries: platforms.map(p => ({ queryKey: ['cash', p], queryFn: () => api.getPlatformCash(p) }))
+    // })
+    // But hooks can't be conditional/looped easily without useQueries.
+    // Let's implement a robust "Fetch All Cash" function in this component for now effectively.
+
+    const [platformCash, setPlatformCash] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        if (holdings) {
+            const fetchCash = async () => {
+                const platforms = Object.keys(holdings);
+                const results: Record<string, number> = {};
+                await Promise.all(platforms.map(async (p) => {
+                    try {
+                        const data = await api.getPlatformCash(p);
+                        results[p] = data.cash_balance;
+                    } catch {
+                        results[p] = 0;
+                    }
+                }));
+                // Only update if changed to avoid expensive re-renders? 
+                // Actually React batches this well.
+                setPlatformCash(results);
+            };
+            fetchCash();
+        }
+    }, [holdings]);
+
+
+    // Mutations
+
+    const updateInvestmentMutation = useMutation({
+        mutationFn: ({ id, updates }: { id: number, updates: Partial<Investment> }) => api.updateInvestment(id, updates),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holdings'] })
+    });
+
+    const deleteInvestmentMutation = useMutation({
+        mutationFn: (id: number) => api.deleteInvestment(id),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holdings'] })
+    });
+
+    const updateCashMutation = useMutation({
+        mutationFn: ({ platform, amount }: { platform: string, amount: number }) => api.updatePlatformCash(platform, amount),
+        onSuccess: (_, variables) => {
+            // Optimistically update local cash state or refetch?
+            // Refetching is safer. Or just update state manually.
+            setPlatformCash(prev => ({ ...prev, [variables.platform]: variables.amount }));
+        }
+    });
+
+    const updatePlatformMutation = useMutation({
+        mutationFn: async ({ oldName, newName, newColor }: { oldName: string, newName: string, newColor?: string }) => {
+            if (oldName !== newName) await api.renamePlatform(oldName, newName);
+            if (newColor) await api.updatePlatformColor(newName, newColor);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['holdings'] });
+            queryClient.invalidateQueries({ queryKey: ['platformColors'] });
+        }
+    });
+
+    // Modal State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedInvestment, setSelectedInvestment] = useState<Investment | null>(null);
-
-    // Platform Edit State
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isPlatformEditModalOpen, setIsPlatformEditModalOpen] = useState(false);
     const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
 
-    const fetchData = async () => {
-        try {
-            setIsLoading(true);
-            let holdingsData = null; // To store holdings data if successful
-
-            // Fetch holdings (critical)
-            try {
-                holdingsData = await api.getHoldings();
-                setHoldings(holdingsData);
-
-                // Fetch cash (non-critical, separate loop) - only if holdingsData is available
-                if (holdingsData) {
-                    const platforms = Object.keys(holdingsData);
-                    const cashBalances: Record<string, number> = {};
-
-                    // We run this in parallel but catch errors per request so one failure doesn't block others
-                    await Promise.all(platforms.map(async (p) => {
-                        try {
-                            const result = await api.getPlatformCash(p);
-                            cashBalances[p] = result.cash_balance;
-                        } catch (e) {
-                            cashBalances[p] = 0;
-                        }
-                    }));
-                    setPlatformCash(cashBalances);
-                }
-            } catch (err) {
-                console.error("Failed to load holdings", err);
-                setError("Failed to load holdings.");
-                // If holdings fail, we can't do much
-            }
-
-            // Fetch colors (non-critical)
-            try {
-                const colors = await api.getPlatformColors();
-                setCustomColors(colors || {});
-            } catch (err) {
-                console.warn("Failed to load custom colors", err);
-                // Don't set error state, just log it. Page can still function without custom colors.
-            }
-
-        } catch (err) {
-            console.error("General fetch error", err);
-            setError("An unexpected error occurred.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchData();
-    }, []);
-
+    // Handlers
     const handleEdit = (inv: Investment) => {
         setSelectedInvestment(inv);
         setIsEditModalOpen(true);
@@ -82,26 +106,28 @@ export default function InvestmentsPage() {
 
     const handleDelete = async (id: number) => {
         if (confirm('Are you sure you want to delete this investment?')) {
-            try {
-                await api.deleteInvestment(id);
-                // Refresh data
-                fetchData();
-            } catch (err) {
-                alert('Failed to delete investment');
-            }
+            deleteInvestmentMutation.mutate(id);
         }
     };
 
     const handleSaveInvestment = async (id: number, updates: Partial<Investment>) => {
-        await api.updateInvestment(id, updates);
-        fetchData();
+        updateInvestmentMutation.mutate({ id, updates });
+        setIsEditModalOpen(false);
+    };
+
+    const handleAddInvestment = () => setIsAddModalOpen(true);
+
+    const handleSaveNewInvestment = () => {
+        // Modal handles the API call internally (based on previous logic), 
+        // OR we need to verify if it passes data.
+        // Based on previous code: handleSaveNewInvestment = () => fetchData();
+        // So it just expects a refresh.
+        queryClient.invalidateQueries({ queryKey: ['holdings'] });
+        setIsAddModalOpen(false);
     };
 
     const handleUpdateCash = async (platform: string, amount: number) => {
-        await api.updatePlatformCash(platform, amount);
-        // Refresh just cash or everything? 
-        // Simple to refresh all or just update local state if we want optimistic UI
-        fetchData();
+        await updateCashMutation.mutateAsync({ platform, amount });
     };
 
     const handleEditPlatform = (platform: string) => {
@@ -110,19 +136,14 @@ export default function InvestmentsPage() {
     };
 
     const handleSavePlatform = async (oldName: string, newName: string, newColor?: string) => {
-        if (oldName !== newName) {
-            await api.renamePlatform(oldName, newName);
-        }
-        if (newColor) {
-            // Use newName here because if we just renamed it, the backend should hopefully have updated,
-            // or the rename updated the color key automatically? 
-            // My backend logic for rename updates the color key. So we should update color for the NEW name.
-            await api.updatePlatformColor(newName, newColor);
-        }
-        fetchData();
+        await updatePlatformMutation.mutateAsync({ oldName, newName, newColor });
+        setIsPlatformEditModalOpen(false);
+        setSelectedPlatform(null);
     };
 
-    if (isLoading) {
+
+
+    if (isLoadingHoldings) {
         return (
             <div className="space-y-6">
                 <h1 className="text-2xl font-bold text-white mb-6">Investments</h1>
@@ -134,11 +155,11 @@ export default function InvestmentsPage() {
         );
     }
 
-    if (error || !holdings) {
+    if (isError || !holdings) {
         return (
             <div className="text-center py-20">
                 <h2 className="text-red-500 text-xl font-bold">Error</h2>
-                <p className="text-slate-400">{error || "No data available"}</p>
+                <p className="text-slate-400">{error?.message || "No data available"}</p>
             </div>
         );
     }
@@ -158,27 +179,28 @@ export default function InvestmentsPage() {
     let totalSpent = 0;
 
     sortedPlatforms.forEach(p => {
-        // Platform total value (holdings + cash)
-        totalPortfolioValue += p.totalValue;
-
-        // Platform spent (sum of investment amount_spent + cash?? No, usually cash cost basis is cash itself)
-        // Wait, "Total Amount Spent" usually means cost basis of investments. Cash is just cash.
-        // If I have £1000 cash, did I "spend" £1000? No.
-        // But for "Profit/Loss", usually it's (Current Value - Cost Basis).
-        // If Cash is included in Value, it should be included in Cost Basis if we consider it "Net Worth".
-        // HOWEVER, traditionally "Amount Spent" refers to invested capital.
-        // Let's assume Total Portfolio Value = Investments Value + Cash.
-        // Total Spent = Investments Cost Basis + Cash (since cash is its own basis).
-        // So P/L on cash is 0. 
-        // Let's stick to that logic so the math works out (Total P/L = Sum of Investment P/L).
-
+        // We only sum the investment values/costs for the summary card 
+        // to match the "Amount Spent" columns and ensure P/L is strictly for investments.
+        // Cash is excluded from these specific totals to prevent "Total Amount Spent" confusion.
+        totalPortfolioValue += p.investments.reduce((sum, inv) => sum + (inv.holdings * inv.current_price), 0);
         const platformInvestedSpent = p.investments.reduce((sum, inv) => sum + inv.amount_spent, 0);
-        totalSpent += platformInvestedSpent + p.cash;
+        totalSpent += platformInvestedSpent;
     });
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-white mb-6">Investments</h1>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-white">Investments</h1>
+                <button
+                    onClick={handleAddInvestment}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Investment
+                </button>
+            </div>
 
             <InvestmentSummaryCard
                 totalValue={totalPortfolioValue}
@@ -191,7 +213,7 @@ export default function InvestmentsPage() {
                         key={platform.name}
                         platformName={platform.name}
                         investments={platform.investments}
-                        totalValue={platform.totalValue} // This now includes cash
+                        totalValue={platform.totalValue}
                         platformCash={platform.cash}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
@@ -200,6 +222,14 @@ export default function InvestmentsPage() {
                     />
                 ))}
             </div>
+
+            {/* Modals */}
+            <AddInvestmentModal
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onSave={handleSaveNewInvestment}
+                existingPlatforms={platforms.map(([name]) => name)}
+            />
 
             {selectedInvestment && (
                 <EditInvestmentModal
@@ -212,7 +242,7 @@ export default function InvestmentsPage() {
 
             {selectedPlatform && (
                 <EditPlatformModal
-                    key={selectedPlatform} // Fixes re-init bug
+                    key={selectedPlatform}
                     platformName={selectedPlatform}
                     isOpen={isPlatformEditModalOpen}
                     onClose={() => {

@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { useState } from 'react';
+import CountUp from 'react-countup';
 
 interface ChartDataPoint {
     date: string;
@@ -25,9 +26,11 @@ interface NetWorthCardProps {
     chartData: ChartDataPoint[];
     isLoading: boolean;
     onTimeRangeChange?: (range: string) => void;
+    isPrivacyMode: boolean;
+    onTogglePrivacy: () => void;
 }
 
-export function NetWorthCard({ summary, chartData, isLoading, onTimeRangeChange }: NetWorthCardProps) {
+export function NetWorthCard({ summary, chartData, isLoading, onTimeRangeChange, isPrivacyMode, onTogglePrivacy }: NetWorthCardProps) {
     const [timeRange, setTimeRange] = useState('24H'); // Default
 
     if (isLoading || !summary) {
@@ -56,11 +59,22 @@ export function NetWorthCard({ summary, chartData, isLoading, onTimeRangeChange 
             <div className="flex justify-between items-start mb-8 relative z-10">
                 <div>
                     <div className="flex items-center gap-4 mb-1">
-                        <h1 className="text-5xl font-bold text-white tracking-tight">
-                            {formatCurrency(summary.total_networth)}
+                        <h1 className={cn("text-5xl font-bold text-white tracking-tight transition-all duration-300", isPrivacyMode ? "blur-md" : "")}>
+                            <CountUp
+                                start={0}
+                                end={summary.total_networth}
+                                duration={2.5}
+                                separator=","
+                                decimals={0}
+                                prefix="£"
+                            />
                         </h1>
-                        <button className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white">
-                            <Eye className="w-5 h-5" />
+                        <button
+                            onClick={onTogglePrivacy}
+                            className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                            title={isPrivacyMode ? "Show details" : "Hide details"}
+                        >
+                            <Eye className={cn("w-5 h-5", isPrivacyMode ? "text-blue-500" : "")} />
                         </button>
                     </div>
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
@@ -117,7 +131,7 @@ export function NetWorthCard({ summary, chartData, isLoading, onTimeRangeChange 
             {/* Chart */}
             <div className="flex-grow w-full min-h-[300px] relative z-10">
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                    <AreaChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                         <defs>
                             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -141,27 +155,36 @@ export function NetWorthCard({ summary, chartData, isLoading, onTimeRangeChange 
                             dy={10}
                         />
                         <YAxis
-                            tickFormatter={(val) => `£${(val / 1000).toFixed(1)}k`}
+                            orientation="right"
+                            tickFormatter={(val) => isPrivacyMode ? '****' : `£${(val / 1000).toFixed(1)}k`}
                             stroke="#475569"
                             fontSize={11}
                             tickLine={false}
                             axisLine={false}
-                            domain={['auto', 'auto']}
+                            domain={['dataMin - 1000', 'dataMax + 1000']}
                         />
-                        <Tooltip
-                            contentStyle={{
-                                backgroundColor: '#0f172a',
-                                border: '1px solid #1e293b',
-                                borderRadius: '12px',
-                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                                color: '#f8fafc'
-                            }}
-                            itemStyle={{ color: '#60a5fa' }}
-                            formatter={(value: number) => [`£${value.toLocaleString()}`, 'Net Worth']}
-                            labelFormatter={(label) => format(new Date(label), 'd MMM yyyy')}
-                        />
+                        {!isPrivacyMode && (
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: '#0f172a',
+                                    border: '1px solid #1e293b',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                                    color: '#f8fafc'
+                                }}
+                                itemStyle={{ color: '#60a5fa' }}
+                                formatter={(value: number) => [`£${value.toLocaleString()}`, 'Net Worth']}
+                                labelFormatter={(label) => {
+                                    const date = new Date(label);
+                                    if (timeRange === '24H') {
+                                        return format(date, 'd MMM HH:mm');
+                                    }
+                                    return format(date, 'd MMM yyyy');
+                                }}
+                            />
+                        )}
                         <Area
-                            type="monotone"
+                            type="basis"
                             dataKey="value"
                             stroke="#3b82f6"
                             strokeWidth={3}

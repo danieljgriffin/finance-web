@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
+import Providers from "./providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,7 +35,9 @@ export default function RootLayout({
             Let's keep pl-24 to push content right of the floating dock. */}
         <main className="pl-24 min-h-screen">
           <div className="container mx-auto px-6 py-8 sm:px-8 lg:px-10 max-w-[1600px]">
-            {children}
+            <Providers>
+              {children}
+            </Providers>
           </div>
         </main>
       </body>
