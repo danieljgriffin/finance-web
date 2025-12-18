@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
+import { api } from '@/lib/apiClient';
 
 interface EditPlatformModalProps {
     platformName: string;
@@ -137,8 +138,8 @@ function Trading212SyncSettings() {
 
     useEffect(() => {
         // Check current status
-        fetch('http://localhost:8000/holdings/config/trading212')
-            .then(res => res.json())
+        // Check current status
+        api.request<{ enabled: boolean }>('/holdings/config/trading212')
             .then(data => setEnabled(data.enabled))
             .catch(err => console.error(err));
     }, []);
@@ -147,15 +148,14 @@ function Trading212SyncSettings() {
         setIsLoading(true);
         setStatusMsg('');
         try {
-            const res = await fetch('http://localhost:8000/holdings/config/trading212', {
+            const data = await api.request<{ status: string }>('/holdings/config/trading212', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                // Content-Type is handled by apiClient
                 body: JSON.stringify({
                     api_key_id: apiKeyId,
                     api_secret_key: apiSecretKey
                 })
             });
-            const data = await res.json();
             if (data.status === 'success') {
                 setStatusMsg('Saved & Enabled!');
                 setEnabled(true);
