@@ -21,9 +21,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
+  if (typeof window !== 'undefined') {
+    console.log("Environment Debug:");
+    console.log("NEXT_PUBLIC_API_BASE_URL:", process.env.NEXT_PUBLIC_API_BASE_URL);
+  }
   return (
     <html lang="en" className="dark">
       <body

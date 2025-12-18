@@ -1,5 +1,14 @@
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, "");
+const envApiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+if (typeof window !== 'undefined') {
+    console.log("ApiClient Init - Raw Env Var:", envApiUrl);
+}
+
+const API_BASE_URL = (envApiUrl || 'http://localhost:8000').replace(/\/+$/, "");
+
+if (typeof window !== 'undefined') {
+    console.log("ApiClient Init - Final API_BASE_URL:", API_BASE_URL);
+}
 
 // Types matching schemas.py
 export interface Investment {
