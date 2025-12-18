@@ -18,11 +18,15 @@ export default function Dashboard() {
   });
 
   // 2. Goals
-  const { data: goals, isLoading: isLoadingGoals } = useQuery({
+  // 2. Goals
+  const { data: goals, isLoading: isLoadingGoals, isError: isGoalsError, error: goalsError } = useQuery({
     queryKey: ['goals'],
     queryFn: () => api.getGoals(),
-    initialData: [],
   });
+
+  if (typeof window !== 'undefined' && goalsError) {
+    console.error("Goals Query Error Object:", goalsError);
+  }
 
   // 3. Chart Data (Depends on Time Range)
   const { data: rawChartData, isLoading: isLoadingChart } = useQuery({
@@ -55,7 +59,7 @@ export default function Dashboard() {
   }
 
   // NetWorthCard takes isLoading, let's pass general loading there likely.
-  const errorMessage = isError ? "Failed to load dashboard data." : null;
+  const errorMessage = isError || isGoalsError ? "Failed to load dashboard data." : null;
 
   if (errorMessage) {
     return (
@@ -92,7 +96,7 @@ export default function Dashboard() {
       {/* Goals Panel - Spans 3 columns (25%) */}
       <div className="col-span-12 lg:col-span-3 h-full">
         <GoalsWidget
-          goals={goals}
+          goals={goals || []}
           isLoading={isLoadingGoals}
           currentNetWorth={summary?.total_networth || 0}
           isPrivacyMode={isPrivacyMode}

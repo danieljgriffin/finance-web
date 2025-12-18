@@ -103,9 +103,134 @@ export default function GoalsPage() {
         }
     };
 
-    const filteredGoals = goals.filter(g =>
-        activeTab === 'active' ? g.status !== 'completed' : g.status === 'completed'
-    );
+    const setAsPrimary = async (goal: Goal, e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            await api.updateGoal(goal.id, { is_primary: true });
+            fetchData();
+        } catch (err) {
+            console.error("Failed to set primary goal", err);
+        }
+    };
+
+    const activeGoals = goals.filter(g => g.status === 'active');
+
+    // Determine the "Current Active Goal"
+    // 1. Explicitly marked as primary
+    // 2. OR Defaults to nearest target date
+    const sortedActiveGoals = [...activeGoals].sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime());
+    const primaryGoal = activeGoals.find(g => g.is_primary) || sortedActiveGoals[0];
+
+    // Upcoming are all active goals that are NOT the primary one
+    const upcomingGoals = primaryGoal ? sortedActiveGoals.filter(g => g.id !== primaryGoal.id) : [];
+
+    const completedGoals = goals.filter(g => g.status === 'completed');
+    const displayGoals = activeTab === 'completed' ? completedGoals : upcomingGoals;
+
+    // Helper to render a goal card
+    const renderGoalCard = (goal: Goal, isPrimaryView: boolean = false) => {
+        const progress = Math.min(100, Math.max(0, (netWorth / goal.target_amount) * 100));
+
+        return (
+            <div key={goal.id} className={cn(
+                "group bg-[#0B101B] border rounded-xl p-6 transition-all relative",
+                isPrimaryView ? "border-blue-500/50 shadow-lg shadow-blue-500/10" : "border-slate-800 hover:border-slate-700"
+            )}>
+                <div className="flex justify-between items-start mb-6">
+                    <div className="flex items-start gap-4">
+                        <div className={cn("p-3 rounded-xl border", isPrimaryView ? "bg-blue-500/10 border-blue-500/20" : "bg-slate-900 border-slate-800")}>
+                            <Target className={cn("w-6 h-6", isPrimaryView ? "text-blue-500" : "text-emerald-500")} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h3 className="font-bold text-white text-lg">{goal.title}</h3>
+                                {isPrimaryView && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500 text-white">
+                                        Current Focus
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5">
+                                <span className="flex items-center gap-1.5">
+                                    <Calendar className="w-3.5 h-3.5" />
+                                    {format(new Date(goal.target_date), 'MMM yyyy')}
+                                </span>
+                                {!isPrimaryView && (
+                                    <span className={cn(
+                                        "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                                        goal.status === 'active' ? "bg-emerald-500/10 text-emerald-500" :
+                                            goal.status === 'completed' ? "bg-blue-500/10 text-blue-500" : "bg-slate-800 text-slate-400"
+                                    )}>
+                                        {goal.status}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!isPrimaryView && activeTab === 'active' && (
+                            <button
+                                onClick={(e) => setAsPrimary(goal, e)}
+                                className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors text-xs flex items-center gap-2"
+                                title="Set as Current Goal"
+                            >
+                                <Target className="w-4 h-4" />
+                            </button>
+                        )}
+                        <button
+                            onClick={() => toggleStatus(goal)}
+                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title={goal.status === 'active' ? "Mark Complete" : "Mark Active"}
+                        >
+                            <CheckCircle className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => openEditModal(goal)}
+                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+                            title="Edit"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => handleDelete(goal.id)}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Delete"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="flex justify-between items-end">
+                        <span className="text-sm text-slate-400">Target</span>
+                        <div className="text-right">
+                            <div className="text-white font-bold text-xl">£{goal.target_amount.toLocaleString()}</div>
+                            <div className="text-xs text-slate-500 mt-1">
+                                <span className={cn("font-medium", isPrimaryView ? "text-blue-500" : "text-emerald-500")}>{progress.toFixed(1)}%</span> achieved
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                            className={cn("h-full rounded-full transition-all duration-1000 ease-out", isPrimaryView ? "bg-gradient-to-r from-blue-600 to-blue-400" : "bg-gradient-to-r from-emerald-600 to-emerald-400")}
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+
+                    <div className="flex justify-between text-xs text-slate-500 pt-1">
+                        <span>£0</span>
+                        <span>£{(goal.target_amount / 2).toLocaleString()}</span>
+                        <span>£{goal.target_amount.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-8 max-w-5xl mx-auto">
@@ -236,109 +361,41 @@ export default function GoalsPage() {
                     {[1, 2].map(i => <div key={i} className="bg-slate-900 h-48 rounded-xl animate-pulse" />)}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredGoals.map((goal) => {
-                        const progress = Math.min(100, Math.max(0, (netWorth / goal.target_amount) * 100));
-
-                        return (
-                            <div key={goal.id} className="group bg-[#0B101B] border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors relative">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="flex items-start gap-4">
-                                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
-                                            <Target className="w-6 h-6 text-emerald-500" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-white text-lg">{goal.title}</h3>
-                                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5">
-                                                <span className="flex items-center gap-1.5">
-                                                    <Calendar className="w-3.5 h-3.5" />
-                                                    {format(new Date(goal.target_date), 'MMM yyyy')}
-                                                </span>
-                                                <span className={cn(
-                                                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                                    goal.status === 'active' ? "bg-emerald-500/10 text-emerald-500" :
-                                                        goal.status === 'completed' ? "bg-blue-500/10 text-blue-500" : "bg-slate-800 text-slate-400"
-                                                )}>
-                                                    {goal.status}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => toggleStatus(goal)}
-                                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                                            title={goal.status === 'active' ? "Mark Complete" : "Mark Active"}
-                                        >
-                                            <CheckCircle className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => openEditModal(goal)}
-                                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
-                                            title="Edit"
-                                        >
-                                            <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(goal.id)}
-                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-end">
-                                        <span className="text-sm text-slate-400">Target</span>
-                                        <div className="text-right">
-                                            <div className="text-white font-bold text-xl">£{goal.target_amount.toLocaleString()}</div>
-                                            <div className="text-xs text-slate-500 mt-1">
-                                                <span className="text-emerald-500 font-medium">{progress.toFixed(1)}%</span> achieved
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Progress Bar */}
-                                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-1000 ease-out"
-                                            style={{ width: `${progress}%` }}
-                                        />
-                                    </div>
-
-                                    <div className="flex justify-between text-xs text-slate-500 pt-1">
-                                        <span>£0</span>
-                                        <span>£{(goal.target_amount / 2).toLocaleString()}</span>
-                                        <span>£{goal.target_amount.toLocaleString()}</span>
-                                    </div>
-                                </div>
+                <div className="space-y-10">
+                    {/* Active Tab View */}
+                    {activeTab === 'active' && primaryGoal && (
+                        <div className="space-y-4">
+                            <h2 className="text-lg font-semibold text-slate-300">Active Goal</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1">
+                                {renderGoalCard(primaryGoal, true)}
                             </div>
-                        );
-                    })}
+                        </div>
+                    )}
 
-                    {filteredGoals.length === 0 && !isLoading && (
+                    {/* Upcoming or Completed View */}
+                    {displayGoals.length > 0 && (
+                        <div className="space-y-4">
+                            <h2 className="text-lg font-semibold text-slate-300">
+                                {activeTab === 'active' ? 'Upcoming Goals' : 'Completed Goals'}
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {displayGoals.map(g => renderGoalCard(g, false))}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeGoals.length === 0 && activeTab === 'active' && !isLoading && (
                         <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-[#0B101B]/50 border border-slate-800 border-dashed rounded-xl">
                             <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center mb-4">
                                 <Target className="w-8 h-8 text-slate-600" />
                             </div>
-                            <h3 className="text-white font-medium mb-1">No {activeTab} goals found</h3>
-                            <p className="text-slate-400 text-sm max-w-sm mx-auto mb-6">
-                                {activeTab === 'active'
-                                    ? "Create a new financial goal to track your progress and stay motivated."
-                                    : "Completed goals will appear here once you reach your targets."}
-                            </p>
-                            {activeTab === 'active' && (
-                                <button
-                                    onClick={openCreateModal}
-                                    className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                                >
-                                    Create First Goal
-                                </button>
-                            )}
+                            <h3 className="text-white font-medium mb-1">No active goals found</h3>
+                            <button
+                                onClick={openCreateModal}
+                                className="mt-4 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                            >
+                                Create First Goal
+                            </button>
                         </div>
                     )}
                 </div>

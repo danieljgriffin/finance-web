@@ -215,7 +215,10 @@ export default function TrackerPage() {
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead>
                             <tr className="bg-[#0f1623] border-b border-slate-800">
-                                <th className="sticky left-0 z-10 bg-[#0f1623] p-4 text-xs font-bold text-slate-400 uppercase tracking-wider border-r border-slate-800 w-48">
+                                <th
+                                    className="sticky left-0 z-20 bg-[#0f1623] p-4 text-xs font-bold text-slate-400 uppercase tracking-wider border-r border-slate-800 w-48 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]"
+                                    style={{ position: 'sticky', left: 0 }}
+                                >
                                     Platform
                                 </th>
                                 {MONTHS.map(month => (
@@ -229,9 +232,14 @@ export default function TrackerPage() {
                             {/* Platform Rows */}
                             {platforms.map(platform => (
                                 <tr key={platform} className="hover:bg-slate-800/30 transition-colors group">
-                                    <td className="sticky left-0 z-10 bg-[#0B101B] group-hover:bg-[#161e2e] p-4 border-r border-slate-800 flex items-center gap-3 transition-colors">
-                                        {renderPlatformDot(platform)}
-                                        <span className="text-white font-medium text-sm truncate max-w-[180px]" title={platform}>{platform}</span>
+                                    <td
+                                        className="sticky left-0 z-20 bg-[#0B101B] group-hover:bg-[#161e2e] p-0 border-r border-slate-800 transition-colors shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]"
+                                        style={{ position: 'sticky', left: 0 }}
+                                    >
+                                        <div className="flex items-center gap-3 p-4 h-full w-full">
+                                            {renderPlatformDot(platform)}
+                                            <span className="text-white font-medium text-sm truncate max-w-[180px]" title={platform}>{platform}</span>
+                                        </div>
                                     </td>
                                     {MONTHS.map(month => {
                                         const value = getValue(platform, month);
@@ -239,7 +247,7 @@ export default function TrackerPage() {
                                             <td key={month} className="p-4 text-right">
                                                 {value > 0 ? (
                                                     <div className="bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1.5 text-slate-300 text-sm font-medium">
-                                                        {value.toLocaleString()}
+                                                        {Math.round(value).toLocaleString()}
                                                     </div>
                                                 ) : (
                                                     <span className="text-slate-700">-</span>
@@ -252,20 +260,23 @@ export default function TrackerPage() {
 
                             {/* Spacer Row */}
                             <tr className="h-4 bg-[#0f1623]/50">
-                                <td className="sticky left-0 z-10 bg-[#0f1623]/50 border-r border-slate-800" />
+                                <td className="sticky left-0 z-20 bg-[#0f1623]/50 border-r border-slate-800" style={{ position: 'sticky', left: 0 }} />
                                 <td colSpan={12} />
                             </tr>
 
                             {/* Total Net Worth Row */}
                             <tr className="bg-[#0f1623] font-bold">
-                                <td className="sticky left-0 z-10 bg-[#0f1623] p-4 text-white text-sm border-r border-slate-800">
+                                <td
+                                    className="sticky left-0 z-20 bg-[#0f1623] p-4 text-white text-sm border-r border-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]"
+                                    style={{ position: 'sticky', left: 0 }}
+                                >
                                     Total Net Worth
                                 </td>
                                 {MONTHS.map(month => {
                                     const total = getMonthTotal(month);
                                     return (
                                         <td key={month} className="p-4 text-right text-white">
-                                            {total > 0 ? `£${total.toLocaleString()}` : '-'}
+                                            {total > 0 ? `£${Math.round(total).toLocaleString()}` : '-'}
                                         </td>
                                     );
                                 })}
@@ -273,7 +284,10 @@ export default function TrackerPage() {
 
                             {/* Month-on-Month Change Row */}
                             <tr className="bg-[#0f1623] border-t border-slate-800">
-                                <td className="sticky left-0 z-10 bg-[#0f1623] p-4 text-slate-400 text-sm border-r border-slate-800">
+                                <td
+                                    className="sticky left-0 z-20 bg-[#0f1623] p-4 text-slate-400 text-sm border-r border-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]"
+                                    style={{ position: 'sticky', left: 0 }}
+                                >
                                     Month-on-Month Change
                                 </td>
                                 {MONTHS.map((month, idx) => {

@@ -56,6 +56,7 @@ export interface Goal {
     target_amount: number;
     target_date: string;
     status: string;
+    is_primary?: boolean;
 }
 
 export interface MonthlyTrackerData {
