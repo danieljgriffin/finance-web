@@ -1,54 +1,69 @@
 import { NextResponse } from "next/server";
 
-// Server-side env vars
-const BASE = (process.env.FINANCE_API_BASE_URL || 'https://finance-api-snqw.onrender.com').replace(/\/+$/, "");
+const BASE = process.env.FINANCE_API_BASE_URL;
 const TOKEN = process.env.PERSONAL_API_TOKEN;
 
-async function handler(req: Request, params: { path: string[] }) {
-    // Reconstruct the destination URL
-    // We need to handle query parameters too
-    const path = params.path.join("/");
+async function proxy(req: Request, ctx: { params: Promise<{ path?: string[] }> }) {
+    if (!BASE) {
+        return NextResponse.json(
+            { error: "Missing FINANCE_API_BASE_URL" },
+            { status: 500 }
+        );
+    }
+
+    if (!TOKEN) {
+        return NextResponse.json(
+            { error: "Missing PERSONAL_API_TOKEN" },
+            { status: 500 }
+        );
+    }
+
+    // Next.js 15: params is a Promise
+    const params = await ctx.params;
+    const pathArr = params?.path ?? [];
+    const path = pathArr.join("/");
+
     const urlObj = new URL(req.url);
-    const queryString = urlObj.search; // includes '?'
+    const search = urlObj.search;
 
-    const destinationUrl = `${BASE}/${path}${queryString}`;
-
-    const headers = new Headers(req.headers);
-    headers.set("Authorization", `Bearer ${TOKEN}`);
-
-    // Clean up headers that might cause issues
-    headers.delete("host");
-    headers.delete("connection");
-    // Don't delete content-length, let fetch handle it or copy it? 
-    // Fetch often handles content-length automatically when body is provided.
+    // Remove trailing slash from BASE to avoid double slashes if path starts with empty
+    const cleanBase = BASE.replace(/\/+$/, "");
+    const url = `${cleanBase}/${path}${search}`;
 
     try {
-        const init: RequestInit = {
+        const upstream = await fetch(url, {
             method: req.method,
-            headers,
-            body: ["GET", "HEAD"].includes(req.method) ? undefined : await req.text(),
+            headers: {
+                Authorization: `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
+            },
             cache: "no-store",
-        };
+        });
 
-        const upstream = await fetch(destinationUrl, init);
-
-        // Get body as ArrayBuffer to handle any content type safely
-        const body = await upstream.arrayBuffer();
+        const body = await upstream.text();
 
         return new NextResponse(body, {
             status: upstream.status,
             headers: {
-                "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
+                "content-type":
+                    upstream.headers.get("content-type") ?? "application/json",
             },
         });
     } catch (error) {
         console.error("Proxy Error:", error);
-        return NextResponse.json({ error: "Failed to reach backend", details: String(error) }, { status: 500 });
+        return NextResponse.json({ error: "Proxy Failed", details: String(error) }, { status: 500 });
     }
 }
 
-export async function GET(req: Request, { params }: any) { return handler(req, params); }
-export async function POST(req: Request, { params }: any) { return handler(req, params); }
-export async function PUT(req: Request, { params }: any) { return handler(req, params); }
-export async function PATCH(req: Request, { params }: any) { return handler(req, params); }
-export async function DELETE(req: Request, { params }: any) { return handler(req, params); }
+export async function GET(req: Request, ctx: any) {
+    return proxy(req, ctx);
+}
+export async function POST(req: Request, ctx: any) {
+    return proxy(req, ctx);
+}
+export async function PUT(req: Request, ctx: any) {
+    return proxy(req, ctx);
+}
+export async function DELETE(req: Request, ctx: any) {
+    return proxy(req, ctx);
+}
