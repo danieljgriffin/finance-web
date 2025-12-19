@@ -1,13 +1,17 @@
 
-const envApiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-if (typeof window !== 'undefined') {
-    console.log("ApiClient Init - Raw Env Var:", envApiUrl);
-}
+// Determines the base URL.
+// Client-side: Use the local Next.js proxy '/api/proxy' to securely inject the token.
+// Server-side: Use the direct backend URL from env vars.
+const isServer = typeof window === 'undefined';
+const API_BASE_URL = isServer
+    ? (process.env.FINANCE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, "")
+    : '/api/proxy';
 
-const API_BASE_URL = (envApiUrl || 'http://localhost:8000').replace(/\/+$/, "");
-
-if (typeof window !== 'undefined') {
-    console.log("ApiClient Init - Final API_BASE_URL:", API_BASE_URL);
+// Logging config for debug
+if (isServer) {
+    console.log(`[ApiClient-Server] Base: ${API_BASE_URL}`);
+} else {
+    // console.log(`[ApiClient-Client] Base: ${API_BASE_URL}`);
 }
 
 // Types matching schemas.py
@@ -78,10 +82,26 @@ class ApiClient {
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
-        // Placeholder for Auth
-        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+
+        // If Server Side, we must inject the token manually if we are bypassing the proxy
+        // (The proxy route itself injects the token, but if we call direct from a Server Component, we need it here)
+        if (isServer) {
+            const serverToken = process.env.PERSONAL_API_TOKEN;
+            if (serverToken) {
+                headers['Authorization'] = `Bearer ${serverToken}`;
+            }
+        } else {
+            // Client Side: The proxy handle auth injection. 
+            // If we had separate user-auth (e.g. login), we would attach that token here.
+            // For now, the app uses the system-wide PERSONAL_API_TOKEN.
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                // Forward user token if it exists (Proxy might need to handle double auth? 
+                // Or we rely on Proxy to ONLY add system token if missing?)
+                // Current requirement: Proxy injects PERSONAL_API_TOKEN.
+                // We leave this here for future-proofing but it likely won't be used now.
+                headers['Authorization'] = `Bearer ${token}`;
+            }
         }
         return headers;
     }
