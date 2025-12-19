@@ -23,10 +23,33 @@ export default function GoalsPage() {
         target_date: format(new Date(), 'yyyy-MM-dd'),
         status: 'active'
     });
+    const [isTitleManuallyEdited, setIsTitleManuallyEdited] = useState(false);
 
     useEffect(() => {
         fetchData();
     }, []);
+
+    // Auto-generate title when amount or date changes, if not manually edited
+    useEffect(() => {
+        if (!isTitleManuallyEdited && formData.target_amount && formData.target_date) {
+            const autoTitle = generateTitle(formData.target_amount, formData.target_date);
+            if (autoTitle !== formData.title) {
+                setFormData(prev => ({ ...prev, title: autoTitle }));
+            }
+        }
+    }, [formData.target_amount, formData.target_date, isTitleManuallyEdited]);
+
+    function generateTitle(amount: number, dateStr: string): string {
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '';
+            const formattedDate = format(date, 'MMM yyyy');
+            const formattedAmount = amount.toLocaleString('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            return `${formattedAmount} by ${formattedDate}`;
+        } catch (e) {
+            return '';
+        }
+    }
 
     async function fetchData() {
         try {
@@ -53,6 +76,7 @@ export default function GoalsPage() {
             target_date: format(new Date(), 'yyyy-MM-dd'),
             status: 'active'
         });
+        setIsTitleManuallyEdited(false);
         setIsModalOpen(true);
     };
 
@@ -64,6 +88,13 @@ export default function GoalsPage() {
             target_date: goal.target_date,
             status: goal.status
         });
+
+        // Check if current title matches what would be auto-generated
+        const autoTitle = generateTitle(goal.target_amount, goal.target_date);
+        // If they match (or title is empty?), then it's NOT manually edited. 
+        // If they differ, user customised it.
+        setIsTitleManuallyEdited(goal.title !== autoTitle && goal.title !== '');
+
         setIsModalOpen(true);
     };
 
@@ -113,7 +144,22 @@ export default function GoalsPage() {
         }
     };
 
-    const activeGoals = goals.filter(g => g.status === 'active');
+    // Helper for robust status checking
+    const isCompletedStatus = (status: string) => ['completed', 'achieved', 'done'].includes(status.toLowerCase());
+    const isActiveStatus = (status: string) => status.toLowerCase() === 'active';
+
+    // Logic Alignment with iOS:
+    // 1. Explicitly Completed (status='completed' OR 'ACHIEVED')
+    // 2. Implicitly Achieved (status='active' BUT target_amount <= netWorth)
+
+    const rawActiveGoals = goals.filter(g => isActiveStatus(g.status));
+    const rawCompletedGoals = goals.filter(g => isCompletedStatus(g.status));
+
+    const implicitlyAchieved = rawActiveGoals.filter(g => g.target_amount <= netWorth);
+    const trulyActiveGoals = rawActiveGoals.filter(g => g.target_amount > netWorth);
+
+    // Active Tab: Only truly active goals
+    const activeGoals = trulyActiveGoals;
 
     // Determine the "Current Active Goal"
     // 1. Explicitly marked as primary
@@ -124,12 +170,18 @@ export default function GoalsPage() {
     // Upcoming are all active goals that are NOT the primary one
     const upcomingGoals = primaryGoal ? sortedActiveGoals.filter(g => g.id !== primaryGoal.id) : [];
 
-    const completedGoals = goals.filter(g => g.status === 'completed');
+    // Completed Tab: Explicitly completed + Implicitly achieved
+    // Sort by target date descending (or completed date if we had one)
+    const completedGoals = [...rawCompletedGoals, ...implicitlyAchieved].sort((a, b) => new Date(b.target_date).getTime() - new Date(a.target_date).getTime());
     const displayGoals = activeTab === 'completed' ? completedGoals : upcomingGoals;
 
     // Helper to render a goal card
     const renderGoalCard = (goal: Goal, isPrimaryView: boolean = false) => {
         const progress = Math.min(100, Math.max(0, (netWorth / goal.target_amount) * 100));
+
+        // Show status badge
+        const currentStatus = goal.status.toLowerCase();
+        const isCompleted = isCompletedStatus(goal.status) || (isActiveStatus(goal.status) && goal.target_amount <= netWorth);
 
         return (
             <div key={goal.id} className={cn(
@@ -291,11 +343,14 @@ export default function GoalsPage() {
                                 <input
                                     type="text"
                                     value={formData.title}
-                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, title: e.target.value });
+                                        setIsTitleManuallyEdited(true);
+                                    }}
                                     className="w-full bg-[#0B101B] border border-slate-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
                                     placeholder="e.g. £100k Net Worth"
                                     autoFocus
-                                    required
+                                // required // Not required because we auto-generate
                                 />
                             </div>
 
