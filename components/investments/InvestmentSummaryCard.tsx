@@ -1,26 +1,33 @@
 'use client';
 
 interface InvestmentSummaryCardProps {
-    totalValue: number;
-    totalSpent: number;
+    totalValue: number; // Investments Only
+    totalCash: number;  // Cash Only
+    totalSpent: number; // Investments Cost
 }
 
-export function InvestmentSummaryCard({ totalValue, totalSpent }: InvestmentSummaryCardProps) {
+export function InvestmentSummaryCard({ totalValue, totalCash, totalSpent }: InvestmentSummaryCardProps) {
+    // Portfolio Value = Investments + Cash
+    const totalPortfolioValue = totalValue + totalCash;
+
+    // Profit is based on Investments performance generally, 
+    // unless we consider Cash as 0 profit.
+    // If we want P/L of the *Investments*, we use totalValue - totalSpent.
     const totalProfit = totalValue - totalSpent;
     const profitPercent = totalSpent > 0 ? (totalProfit / totalSpent) * 100 : 0;
     const isPositive = totalProfit >= 0;
 
     return (
         <div className="bg-[#0B101B] border border-slate-800 rounded-2xl p-6 mb-8">
-            <h2 className="text-white font-semibold mb-6">Investment Summary</h2>
+            <h2 className="text-white font-semibold mb-6">Portfolio Summary</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                {/* Total Value */}
+                {/* Total Portfolio Value */}
                 <div className="text-center md:text-left">
                     <div className="text-3xl font-bold text-white mb-1">
-                        £{totalValue.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        £{totalPortfolioValue.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Investment Value</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-wider">Total Portfolio Value</div>
                 </div>
 
                 {/* Total Spent */}

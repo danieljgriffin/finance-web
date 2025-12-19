@@ -175,22 +175,25 @@ export default function InvestmentsPage() {
     }).sort((a, b) => b.totalValue - a.totalValue);
 
     // Calculate Summary Metrics
-    let totalPortfolioValue = 0;
+    // Calculate Summary Metrics
+    let totalInvestmentsValue = 0;
     let totalSpent = 0;
+    let totalCash = 0;
 
     sortedPlatforms.forEach(p => {
-        // We only sum the investment values/costs for the summary card 
-        // to match the "Amount Spent" columns and ensure P/L is strictly for investments.
-        // Cash is excluded from these specific totals to prevent "Total Amount Spent" confusion.
-        totalPortfolioValue += p.investments.reduce((sum, inv) => sum + (inv.holdings * inv.current_price), 0);
+        // sum investments value
+        totalInvestmentsValue += p.investments.reduce((sum, inv) => sum + (inv.holdings * inv.current_price), 0);
+        // sum investments cost
         const platformInvestedSpent = p.investments.reduce((sum, inv) => sum + inv.amount_spent, 0);
         totalSpent += platformInvestedSpent;
+        // sum cash
+        totalCash += p.cash;
     });
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-white">Investments</h1>
+                <h1 className="text-2xl font-bold text-white">Portfolio</h1>
                 <button
                     onClick={handleAddInvestment}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
@@ -203,7 +206,8 @@ export default function InvestmentsPage() {
             </div>
 
             <InvestmentSummaryCard
-                totalValue={totalPortfolioValue}
+                totalValue={totalInvestmentsValue}
+                totalCash={totalCash}
                 totalSpent={totalSpent}
             />
 

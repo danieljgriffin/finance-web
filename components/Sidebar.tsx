@@ -9,7 +9,7 @@ import { Home, PieChart, Target, CalendarDays, Wallet } from 'lucide-react';
 // Only showing Dashboard, Investments, Tracker.
 const navItems = [
     { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Investments', href: '/investments', icon: PieChart },
+    { name: 'Portfolio', href: '/portfolio', icon: PieChart },
     { name: 'Tracker', href: '/tracker', icon: CalendarDays },
 ];
 
