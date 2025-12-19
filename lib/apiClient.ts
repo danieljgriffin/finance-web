@@ -132,6 +132,11 @@ class ApiClient {
         }
     }
 
+    // Generic accessible fetch
+    public async fetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+        return this.request<T>(endpoint, options);
+    }
+
     // Net Worth
     async getNetWorthSummary() {
         return this.request<NetWorthSummary>('/net-worth/summary');

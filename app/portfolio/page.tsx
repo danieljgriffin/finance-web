@@ -9,75 +9,49 @@ import { EditInvestmentModal } from '@/components/investments/EditInvestmentModa
 import { EditPlatformModal } from '@/components/investments/EditPlatformModal';
 import { AddInvestmentModal } from '@/components/investments/AddInvestmentModal';
 
+// 1. Define Backend Response Types
+interface PlatformSummary {
+    name: string;
+    total_value: number;
+    total_invested: number;
+    total_pl: number;
+    total_pl_percent: number;
+    cash_balance: number;
+    investments: Investment[];
+    color: string;
+}
+
+interface PortfolioSummary {
+    total_value: number;
+    total_invested: number;
+    total_pl: number;
+    total_pl_percent: number;
+    platforms: PlatformSummary[];
+}
+
 export default function InvestmentsPage() {
     const queryClient = useQueryClient();
 
-    // 1. Fetch Holdings
-    const { data: holdings, isLoading: isLoadingHoldings, isError, error } = useQuery({
-        queryKey: ['holdings'],
-        queryFn: () => api.getHoldings(),
+    // 1. Fetch Portfolio Summary (One Shot)
+    const { data, isLoading: isLoadingHoldings, isError, error } = useQuery<PortfolioSummary>({
+        queryKey: ['portfolio'],
+        queryFn: () => api.fetch<PortfolioSummary>('/holdings/portfolio'),
     });
 
-
-    // 3. Fetch Cash (Dependent on Holdings)
-    // We fetch ALL cash for platforms found in holdings.
-    // Ideally use useQueries, but for simplicity/speed let's use a side-effect fetch or a composite query.
-    // A better pattern: generic "fetch all platform cash" query if API supported it.
-    // For now, let's keep the cash loading simple: fetch in standard useEffect when holdings change, 
-    // OR use useQuery for each platform. 
-    // Let's stick to state for cash for this iteration to minimize breaking changes, 
-    // but trigger it from holdings data presence.
-
-    // Better: useQueries? 
-    // const results = useQueries({
-    //    queries: platforms.map(p => ({ queryKey: ['cash', p], queryFn: () => api.getPlatformCash(p) }))
-    // })
-    // But hooks can't be conditional/looped easily without useQueries.
-    // Let's implement a robust "Fetch All Cash" function in this component for now effectively.
-
-    const [platformCash, setPlatformCash] = useState<Record<string, number>>({});
-
-    useEffect(() => {
-        if (holdings) {
-            const fetchCash = async () => {
-                const platforms = Object.keys(holdings);
-                const results: Record<string, number> = {};
-                await Promise.all(platforms.map(async (p) => {
-                    try {
-                        const data = await api.getPlatformCash(p);
-                        results[p] = data.cash_balance;
-                    } catch {
-                        results[p] = 0;
-                    }
-                }));
-                // Only update if changed to avoid expensive re-renders? 
-                // Actually React batches this well.
-                setPlatformCash(results);
-            };
-            fetchCash();
-        }
-    }, [holdings]);
-
-
     // Mutations
-
     const updateInvestmentMutation = useMutation({
         mutationFn: ({ id, updates }: { id: number, updates: Partial<Investment> }) => api.updateInvestment(id, updates),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holdings'] })
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     });
 
     const deleteInvestmentMutation = useMutation({
         mutationFn: (id: number) => api.deleteInvestment(id),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holdings'] })
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     });
 
     const updateCashMutation = useMutation({
         mutationFn: ({ platform, amount }: { platform: string, amount: number }) => api.updatePlatformCash(platform, amount),
-        onSuccess: (_, variables) => {
-            // Optimistically update local cash state or refetch?
-            // Refetching is safer. Or just update state manually.
-            setPlatformCash(prev => ({ ...prev, [variables.platform]: variables.amount }));
-        }
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     });
 
     const updatePlatformMutation = useMutation({
@@ -86,8 +60,7 @@ export default function InvestmentsPage() {
             if (newColor) await api.updatePlatformColor(newName, newColor);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['holdings'] });
-            queryClient.invalidateQueries({ queryKey: ['platformColors'] });
+            queryClient.invalidateQueries({ queryKey: ['portfolio'] });
         }
     });
 
@@ -118,11 +91,7 @@ export default function InvestmentsPage() {
     const handleAddInvestment = () => setIsAddModalOpen(true);
 
     const handleSaveNewInvestment = () => {
-        // Modal handles the API call internally (based on previous logic), 
-        // OR we need to verify if it passes data.
-        // Based on previous code: handleSaveNewInvestment = () => fetchData();
-        // So it just expects a refresh.
-        queryClient.invalidateQueries({ queryKey: ['holdings'] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio'] });
         setIsAddModalOpen(false);
     };
 
@@ -141,8 +110,6 @@ export default function InvestmentsPage() {
         setSelectedPlatform(null);
     };
 
-
-
     if (isLoadingHoldings) {
         return (
             <div className="space-y-6">
@@ -155,7 +122,7 @@ export default function InvestmentsPage() {
         );
     }
 
-    if (isError || !holdings) {
+    if (isError || !data) {
         return (
             <div className="text-center py-20">
                 <h2 className="text-red-500 text-xl font-bold">Error</h2>
@@ -163,32 +130,6 @@ export default function InvestmentsPage() {
             </div>
         );
     }
-
-    const platforms = Object.entries(holdings);
-
-    // Sort platforms by total value
-    const sortedPlatforms = platforms.map(([name, investments]) => {
-        const totalInvested = investments.reduce((sum, inv) => sum + (inv.holdings * inv.current_price), 0);
-        const cash = platformCash[name] || 0;
-        const totalValue = totalInvested + cash;
-        return { name, investments, totalValue, cash };
-    }).sort((a, b) => b.totalValue - a.totalValue);
-
-    // Calculate Summary Metrics
-    // Calculate Summary Metrics
-    let totalInvestmentsValue = 0;
-    let totalSpent = 0;
-    let totalCash = 0;
-
-    sortedPlatforms.forEach(p => {
-        // sum investments value
-        totalInvestmentsValue += p.investments.reduce((sum, inv) => sum + (inv.holdings * inv.current_price), 0);
-        // sum investments cost
-        const platformInvestedSpent = p.investments.reduce((sum, inv) => sum + inv.amount_spent, 0);
-        totalSpent += platformInvestedSpent;
-        // sum cash
-        totalCash += p.cash;
-    });
 
     return (
         <div className="space-y-6">
@@ -206,19 +147,20 @@ export default function InvestmentsPage() {
             </div>
 
             <InvestmentSummaryCard
-                totalValue={totalInvestmentsValue}
-                totalCash={totalCash}
-                totalSpent={totalSpent}
+                totalPortfolioValue={data.total_value}
+                totalInvested={data.total_invested}
+                totalProfit={data.total_pl}
+                totalProfitPercent={data.total_pl_percent}
             />
 
             <div className="space-y-6">
-                {sortedPlatforms.map((platform) => (
+                {data.platforms.map((platform) => (
                     <InvestmentPlatformCard
                         key={platform.name}
                         platformName={platform.name}
                         investments={platform.investments}
-                        totalValue={platform.totalValue}
-                        platformCash={platform.cash}
+                        totalValue={platform.total_value}
+                        platformCash={platform.cash_balance}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
                         onUpdateCash={handleUpdateCash}
@@ -232,7 +174,7 @@ export default function InvestmentsPage() {
                 isOpen={isAddModalOpen}
                 onClose={() => setIsAddModalOpen(false)}
                 onSave={handleSaveNewInvestment}
-                existingPlatforms={platforms.map(([name]) => name)}
+                existingPlatforms={data.platforms.map((p) => p.name)}
             />
 
             {selectedInvestment && (

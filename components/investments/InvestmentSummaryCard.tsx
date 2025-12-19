@@ -1,20 +1,13 @@
 'use client';
 
 interface InvestmentSummaryCardProps {
-    totalValue: number; // Investments Only
-    totalCash: number;  // Cash Only
-    totalSpent: number; // Investments Cost
+    totalPortfolioValue: number;
+    totalInvested: number;
+    totalProfit: number;
+    totalProfitPercent: number;
 }
 
-export function InvestmentSummaryCard({ totalValue, totalCash, totalSpent }: InvestmentSummaryCardProps) {
-    // Portfolio Value = Investments + Cash
-    const totalPortfolioValue = totalValue + totalCash;
-
-    // Profit is based on Investments performance generally, 
-    // unless we consider Cash as 0 profit.
-    // If we want P/L of the *Investments*, we use totalValue - totalSpent.
-    const totalProfit = totalValue - totalSpent;
-    const profitPercent = totalSpent > 0 ? (totalProfit / totalSpent) * 100 : 0;
+export function InvestmentSummaryCard({ totalPortfolioValue, totalInvested, totalProfit, totalProfitPercent }: InvestmentSummaryCardProps) {
     const isPositive = totalProfit >= 0;
 
     return (
@@ -33,7 +26,7 @@ export function InvestmentSummaryCard({ totalValue, totalCash, totalSpent }: Inv
                 {/* Total Spent */}
                 <div className="text-center md:text-left">
                     <div className="text-3xl font-bold text-white mb-1">
-                        £{totalSpent.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        £{totalInvested.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div className="text-xs text-slate-500 uppercase tracking-wider">Total Amount Spent</div>
                 </div>
@@ -41,7 +34,7 @@ export function InvestmentSummaryCard({ totalValue, totalCash, totalSpent }: Inv
                 {/* Percentage P/L */}
                 <div className="text-center md:text-left">
                     <div className={`text-3xl font-bold mb-1 ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {isPositive ? '+' : ''}{profitPercent.toFixed(2)}%
+                        {isPositive ? '+' : ''}{totalProfitPercent.toFixed(2)}%
                     </div>
                     <div className="text-xs text-slate-500 uppercase tracking-wider">Percentage Profit/Loss</div>
                 </div>
