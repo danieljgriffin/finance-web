@@ -18,17 +18,22 @@ export default function TrackerPage() {
     const [error, setError] = useState<string | null>(null);
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
     const [availableYears, setAvailableYears] = useState<number[]>([]);
+    const [currentNetWorth, setCurrentNetWorth] = useState<number>(0);
 
     useEffect(() => {
         async function fetchData() {
             try {
                 setIsLoading(true);
-                const [data, colors] = await Promise.all([
+                const [data, colors, summary] = await Promise.all([
                     api.getMonthlyTracker(),
-                    api.getPlatformColors()
+                    api.getPlatformColors(),
+                    api.getNetWorthSummary()
                 ]);
 
                 setCustomColors(colors || {});
+                if (summary && summary.total_networth) {
+                    setCurrentNetWorth(summary.total_networth);
+                }
 
                 if (Array.isArray(data)) {
                     setTrackerData(data);
@@ -119,7 +124,17 @@ export default function TrackerPage() {
     // Yearly change metric
     const yearlyIncrease = useMemo(() => {
         const janTotal = getMonthTotal('1st Jan');
+        if (janTotal === 0) return 0;
 
+        const currentYear = new Date().getFullYear();
+
+        // If we are looking at the current year, compare Jan 1st against the LIVE net worth
+        // This ensures the "Yearly Increase" matches the Dashboard which uses live values.
+        if (selectedYear === currentYear && currentNetWorth > 0) {
+            return ((currentNetWorth - janTotal) / janTotal) * 100;
+        }
+
+        // For past years (or if live data missing), compare against the latest available month record
         // Find the last month with data. Priority: 31st Dec, else work backwards
         let lastMonthIndex = MONTHS.length - 1;
         while (lastMonthIndex > 0 && !yearData.some(d => d.month === MONTHS[lastMonthIndex])) {
@@ -127,9 +142,8 @@ export default function TrackerPage() {
         }
         const lastTotal = getMonthTotal(MONTHS[lastMonthIndex]);
 
-        if (janTotal === 0) return 0;
         return ((lastTotal - janTotal) / janTotal) * 100;
-    }, [yearData]);
+    }, [yearData, selectedYear, currentNetWorth]);
 
     if (isLoading) {
         return <div className="p-8 text-center text-slate-400 animate-pulse">Loading tracker data...</div>;
