@@ -39,7 +39,7 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }
     // Calculate days remaining
     const targetDate = new Date(currentGoal.target_date);
     const now = new Date();
-    const diffTime = Math.abs(targetDate.getTime() - now.getTime());
+    const diffTime = targetDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     return (
