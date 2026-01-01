@@ -8,7 +8,7 @@ import IncomeInvestmentTable from '@/components/tracker/IncomeInvestmentTable';
 
 const MONTHS = [
     '1st Jan', '1st Feb', '1st Mar', '1st Apr', '1st May', '1st Jun',
-    '1st Jul', '1st Aug', '1st Sep', '1st Oct', '1st Nov', '1st Dec', '31st Dec'
+    '1st Jul', '1st Aug', '1st Sep', '1st Oct', '1st Nov', '1st Dec'
 ];
 
 export default function TrackerPage() {
@@ -103,17 +103,27 @@ export default function TrackerPage() {
 
     // Helper to get MoM change
     const getMonthChange = (monthIndex: number) => {
-        if (monthIndex === 0) return { change: 0, percent: 0 }; // Jan has no prev month in this view (unless we fetch prev year)
-
         const currentMonth = MONTHS[monthIndex];
-        const prevMonth = MONTHS[monthIndex - 1];
-
         const currentTotal = getMonthTotal(currentMonth);
-        const prevTotal = getMonthTotal(prevMonth);
 
         // If we have no data for current month, return 0 (don't show big drops if data is missing)
         const hasCurrentData = yearData.some(d => d.month === currentMonth);
-        if (!hasCurrentData || prevTotal === 0) return { change: 0, percent: 0 };
+        if (!hasCurrentData) return { change: 0, percent: 0 };
+
+        let prevTotal = 0;
+
+        if (monthIndex > 0) {
+            const prevMonth = MONTHS[monthIndex - 1];
+            prevTotal = getMonthTotal(prevMonth);
+        } else {
+            // Jan case: Need to fetch Dec of previous year
+            const prevYear = selectedYear - 1;
+            // Look into the COMPLETE trackerData array for the previous year's record
+            const prevYearDecData = trackerData?.find(d => d.year === prevYear && (d.month === '1st Dec' || d.month === 'Dec'));
+            prevTotal = prevYearDecData?.total_networth || 0;
+        }
+
+        if (prevTotal === 0) return { change: 0, percent: 0 };
 
         const change = currentTotal - prevTotal;
         const percent = (change / prevTotal) * 100;
@@ -135,7 +145,7 @@ export default function TrackerPage() {
         }
 
         // For past years (or if live data missing), compare against the latest available month record
-        // Find the last month with data. Priority: 31st Dec, else work backwards
+        // Find the last month with data. Priority: Dec, else work backwards
         let lastMonthIndex = MONTHS.length - 1;
         while (lastMonthIndex > 0 && !yearData.some(d => d.month === MONTHS[lastMonthIndex])) {
             lastMonthIndex--;
@@ -214,7 +224,7 @@ export default function TrackerPage() {
                 <div className="px-6 py-6 border-b border-slate-800 flex justify-between items-start">
                     <div>
                         <h2 className="text-xl font-bold text-white mb-1">{selectedYear} Monthly Net Worth Tracking</h2>
-                        <p className="text-slate-400 text-sm">Track platform values on the 1st of each month and 31st December</p>
+                        <p className="text-slate-400 text-sm">Track platform values on the 1st of each month</p>
                     </div>
                     <div className="text-right">
                         <div className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Yearly Net Worth Increase</div>
