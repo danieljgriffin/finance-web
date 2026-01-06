@@ -12,6 +12,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                 staleTime: 60 * 1000,
                 // Refetch on window focus ensures data is current when user returns
                 refetchOnWindowFocus: true,
+                // Auto-refresh every 15 minutes (in milliseconds)
+                refetchInterval: 15 * 60 * 1000,
             },
         },
     }));
