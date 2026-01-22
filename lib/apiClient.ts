@@ -235,6 +235,12 @@ class ApiClient {
         return this.request<Record<string, string>>('/holdings/platform/colors');
     }
 
+    async refreshPrices() {
+        return this.request<any>('/holdings/refresh-prices', {
+            method: 'POST',
+        });
+    }
+
     // Goals
     async getGoals() {
         return this.request<Goal[]>('/goals/');

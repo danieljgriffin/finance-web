@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/apiClient';
 import { NetWorthCard } from '@/components/dashboard/NetWorthCard';
 import { PlatformBreakdown } from '@/components/dashboard/PlatformBreakdown';
@@ -10,18 +10,30 @@ import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
 export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('24H');
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Trigger backend price refresh on mount (fire and forget)
+  useEffect(() => {
+    // We don't await this to avoid blocking UI rendering
+    api.refreshPrices().then(() => {
+      // After backend refresh, invalidate cache to refetch updated numbers
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    }).catch(err => console.error("Auto-refresh trigger failed", err));
+  }, [queryClient]);
 
   // 1. Dashboard Summary
   const { data: summary, isLoading: isLoadingSummary, isError } = useQuery({
     queryKey: ['dashboardSummary'],
     queryFn: () => api.getDashboardSummary(),
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // 2. Goals
   // 2. Goals
   const { data: goals, isLoading: isLoadingGoals, isError: isGoalsError, error: goalsError } = useQuery({
     queryKey: ['goals'],
     queryFn: () => api.getGoals(),
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   if (typeof window !== 'undefined' && goalsError) {
