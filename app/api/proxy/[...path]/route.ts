@@ -31,18 +31,25 @@ async function proxy(req: Request, ctx: { params: Promise<{ path?: string[] }> }
     const url = `${cleanBase}/${path}${search}`;
 
     try {
+        // Read the request body for POST/PUT/PATCH methods
+        let body: string | null = null;
+        if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+            body = await req.text();
+        }
+
         const upstream = await fetch(url, {
             method: req.method,
             headers: {
                 Authorization: `Bearer ${TOKEN}`,
                 "Content-Type": "application/json",
             },
+            body: body,
             cache: "no-store",
         });
 
-        const body = await upstream.text();
+        const responseBody = await upstream.text();
 
-        return new NextResponse(body, {
+        return new NextResponse(responseBody, {
             status: upstream.status,
             headers: {
                 "content-type":
