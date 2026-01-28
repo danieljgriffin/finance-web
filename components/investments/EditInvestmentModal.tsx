@@ -24,6 +24,35 @@ export function EditInvestmentModal({ investment, isOpen, onClose, onSave }: Edi
         setAmountSpent(investment.amount_spent.toString());
     }, [investment.id, investment.holdings, investment.average_buy_price, investment.amount_spent]);
 
+    // Auto-calculate amount spent when holdings or avg price changes
+    const handleHoldingsChange = (value: string) => {
+        setHoldings(value);
+        const h = parseFloat(value);
+        const p = parseFloat(avgPrice);
+        if (!isNaN(h) && !isNaN(p) && h > 0 && p > 0) {
+            setAmountSpent((h * p).toFixed(2));
+        }
+    };
+
+    const handleAvgPriceChange = (value: string) => {
+        setAvgPrice(value);
+        const h = parseFloat(holdings);
+        const p = parseFloat(value);
+        if (!isNaN(h) && !isNaN(p) && h > 0 && p > 0) {
+            setAmountSpent((h * p).toFixed(2));
+        }
+    };
+
+    // Auto-calculate avg price when amount spent changes (with holdings fixed)
+    const handleAmountSpentChange = (value: string) => {
+        setAmountSpent(value);
+        const h = parseFloat(holdings);
+        const spent = parseFloat(value);
+        if (!isNaN(h) && !isNaN(spent) && h > 0 && spent > 0) {
+            setAvgPrice((spent / h).toFixed(4));
+        }
+    };
+
     if (!isOpen) return null;
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -70,7 +99,7 @@ export function EditInvestmentModal({ investment, isOpen, onClose, onSave }: Edi
                             type="number"
                             step="any"
                             value={holdings}
-                            onChange={(e) => setHoldings(e.target.value)}
+                            onChange={(e) => handleHoldingsChange(e.target.value)}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
                         />
                     </div>
@@ -81,7 +110,7 @@ export function EditInvestmentModal({ investment, isOpen, onClose, onSave }: Edi
                             type="number"
                             step="any"
                             value={avgPrice}
-                            onChange={(e) => setAvgPrice(e.target.value)}
+                            onChange={(e) => handleAvgPriceChange(e.target.value)}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
                         />
                     </div>
@@ -92,11 +121,11 @@ export function EditInvestmentModal({ investment, isOpen, onClose, onSave }: Edi
                             type="number"
                             step="any"
                             value={amountSpent}
-                            onChange={(e) => setAmountSpent(e.target.value)}
+                            onChange={(e) => handleAmountSpentChange(e.target.value)}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
                         />
                         <p className="text-xs text-slate-500 mt-1">
-                            Note: Updating price/shares does not auto-calc this unless backend logic changes.
+                            Auto-calculated: Amount = Holdings × Avg Price
                         </p>
                     </div>
 
@@ -122,3 +151,4 @@ export function EditInvestmentModal({ investment, isOpen, onClose, onSave }: Edi
         </div>
     );
 }
+
