@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Investment } from '@/lib/apiClient';
 import { X, Save } from 'lucide-react';
 
@@ -16,6 +16,13 @@ export function EditInvestmentModal({ investment, isOpen, onClose, onSave }: Edi
     const [avgPrice, setAvgPrice] = useState(investment.average_buy_price.toString());
     const [amountSpent, setAmountSpent] = useState(investment.amount_spent.toString());
     const [isSaving, setIsSaving] = useState(false);
+
+    // Reset form state when investment prop changes
+    useEffect(() => {
+        setHoldings(investment.holdings.toString());
+        setAvgPrice(investment.average_buy_price.toString());
+        setAmountSpent(investment.amount_spent.toString());
+    }, [investment.id, investment.holdings, investment.average_buy_price, investment.amount_spent]);
 
     if (!isOpen) return null;
 
