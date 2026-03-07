@@ -28,7 +28,7 @@ export function PlatformBreakdown({ summary, isLoading, isPrivacyMode }: Platfor
         <div className="bg-[#0B101B] border border-slate-800 rounded-2xl p-6 h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-semibold text-white">Net Worth Breakdown</h2>
-                <Link href="/investments" className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium transition-colors">
+                <Link href="/portfolio" className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium transition-colors">
                     View all <ArrowRight className="w-3 h-3 ml-1" />
                 </Link>
             </div>
