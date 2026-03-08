@@ -111,7 +111,7 @@ export function NetWorthCard({ summary, chartData, isLoading, onTimeRangeChange,
                 <h2 className="text-lg font-semibold text-white">Net Worth Performance</h2>
 
                 <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800/50">
-                    {['24H', '1W', '1M', '3M', '6M', '1Y', 'Max'].map((range) => (
+                    {['24H', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'Max'].map((range) => (
                         <button
                             key={range}
                             onClick={() => handleTimeRangeClick(range)}
