@@ -175,6 +175,7 @@ export default function InvestmentsPage() {
                 onClose={() => setIsAddModalOpen(false)}
                 onSave={handleSaveNewInvestment}
                 existingPlatforms={data.platforms.map((p) => p.name)}
+                platformsData={data.platforms.map((p) => ({ name: p.name, investments: p.investments }))}
             />
 
             {selectedInvestment && (
