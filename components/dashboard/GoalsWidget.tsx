@@ -1,8 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { Goal } from '@/lib/apiClient';
-import { ArrowRight, CalendarClock, Coins } from 'lucide-react';
+import { ArrowRight, CalendarClock, Coins, CheckCircle, Trophy } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/apiClient';
 
 interface GoalsWidgetProps {
     goals: Goal[];
@@ -12,6 +16,8 @@ interface GoalsWidgetProps {
 }
 
 export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }: GoalsWidgetProps) {
+    const queryClient = useQueryClient();
+    const [isCompleting, setIsCompleting] = useState(false);
     if (isLoading) {
         return <div className="bg-[#0B101B] border border-slate-800 rounded-2xl p-6 h-full animate-pulse" />;
     }
@@ -42,6 +48,33 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }
     const diffTime = targetDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+    const isGoalReached = currentNetWorth >= currentGoal.target_amount;
+
+    const handleCompleteGoal = async () => {
+        setIsCompleting(true);
+        try {
+            // Trigger Confetti
+            confetti({
+                particleCount: 150,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#3b82f6', '#22d3ee', '#10b981', '#f59e0b', '#ec4899']
+            });
+
+            // Update Backend
+            await api.updateGoal(currentGoal.id, { status: 'completed' });
+            
+            // Wait a moment for UX
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['goals'] });
+                setIsCompleting(false);
+            }, 2000);
+        } catch (error) {
+            console.error("Failed to complete goal:", error);
+            setIsCompleting(false);
+        }
+    };
+
     return (
         <div className="bg-[#0B101B] border border-slate-800 rounded-2xl p-6 h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
@@ -51,39 +84,67 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }
                 </Link>
             </div>
 
-            {/* Main Goal Progress */}
+            {/* Main Goal Section */}
             <div className="mb-8">
-                <div className="text-sm text-slate-400 mb-4">
-                    <span className={isPrivacyMode ? "blur-sm" : ""}>
-                        £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
-                    </span>
-                    {' '}by {targetDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
-                </div>
-
-                <div className="flex justify-between items-end mb-2">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</span>
-                    <span className="text-lg font-bold text-white">{progress.toFixed(1)}%</span>
-                </div>
-
-                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mb-6">
-                    <div
-                        className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full"
-                        style={{ width: `${progress}%` }}
-                    />
-                </div>
-
-                <div className="flex justify-between items-center text-sm">
-                    <div>
-                        <div className={`text-blue-400 font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
-                            £{currentNetWorth.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                {isGoalReached ? (
+                    <div className="bg-gradient-to-br from-blue-900/40 to-cyan-900/20 border border-blue-500/30 rounded-xl p-6 flex flex-col items-center text-center">
+                        <div className="bg-blue-500/20 p-3 rounded-full mb-3">
+                            <Trophy className="w-8 h-8 text-blue-400" />
                         </div>
+                        <h3 className="text-xl font-bold text-white mb-1">Goal Reached! 🎉</h3>
+                        <p className="text-sm text-blue-200/70 mb-5">
+                            You've hit your target of <span className={`font-semibold text-blue-200 ${isPrivacyMode ? 'blur-sm' : ''}`}>£{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</span>
+                        </p>
+                        <button 
+                            onClick={handleCompleteGoal}
+                            disabled={isCompleting}
+                            className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium py-3 px-4 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all flex justify-center items-center gap-2"
+                        >
+                            {isCompleting ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <CheckCircle className="w-5 h-5" />
+                                    <span>Complete Goal</span>
+                                </>
+                            )}
+                        </button>
                     </div>
-                    <div className="text-right">
-                        <div className={`text-white font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
-                            £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                ) : (
+                    <>
+                        <div className="text-sm text-slate-400 mb-4">
+                            <span className={isPrivacyMode ? "blur-sm" : ""}>
+                                £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                            </span>
+                            {' '}by {targetDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
                         </div>
-                    </div>
-                </div>
+
+                        <div className="flex justify-between items-end mb-2">
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</span>
+                            <span className="text-lg font-bold text-white">{progress.toFixed(1)}%</span>
+                        </div>
+
+                        <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mb-6">
+                            <div
+                                className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+
+                        <div className="flex justify-between items-center text-sm">
+                            <div>
+                                <div className={`text-blue-400 font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
+                                    £{currentNetWorth.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className={`text-white font-bold ${isPrivacyMode ? 'blur-sm' : ''}`}>
+                                    £{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-8">
