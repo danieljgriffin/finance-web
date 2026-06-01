@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, Goal } from '@/lib/apiClient';
-import { Plus, Target, Calendar, CheckSquare, Trash2, Edit2, CheckCircle, MoreVertical, X } from 'lucide-react';
+import { Plus, Target, Calendar, CheckSquare, Trash2, Edit2, CheckCircle, MoreVertical, X, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -148,40 +148,37 @@ export default function GoalsPage() {
     const isCompletedStatus = (status: string) => ['completed', 'achieved', 'done'].includes(status.toLowerCase());
     const isActiveStatus = (status: string) => status.toLowerCase() === 'active';
 
-    // Logic Alignment with iOS:
-    // 1. Explicitly Completed (status='completed' OR 'ACHIEVED')
-    // 2. Implicitly Achieved (status='active' BUT target_amount <= netWorth)
-
-    const rawActiveGoals = goals.filter(g => isActiveStatus(g.status));
-    const rawCompletedGoals = goals.filter(g => isCompletedStatus(g.status));
-
-    const implicitlyAchieved = rawActiveGoals.filter(g => g.target_amount <= netWorth);
-    const trulyActiveGoals = rawActiveGoals.filter(g => g.target_amount > netWorth);
-
-    // Active Tab: Only truly active goals
-    const activeGoals = trulyActiveGoals;
+    // Separate goals by explicit status only (matching iOS logic)
+    const activeGoals = goals.filter(g => isActiveStatus(g.status)).sort(
+        (a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime()
+    );
 
     // Determine the "Current Active Goal"
     // 1. Explicitly marked as primary
     // 2. OR Defaults to nearest target date
-    const sortedActiveGoals = [...activeGoals].sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime());
-    const primaryGoal = activeGoals.find(g => g.is_primary) || sortedActiveGoals[0];
+    const primaryGoal = activeGoals.find(g => g.is_primary) || activeGoals[0];
 
     // Upcoming are all active goals that are NOT the primary one
-    const upcomingGoals = primaryGoal ? sortedActiveGoals.filter(g => g.id !== primaryGoal.id) : [];
+    const upcomingGoals = primaryGoal ? activeGoals.filter(g => g.id !== primaryGoal.id) : [];
 
-    // Completed Tab: Explicitly completed + Implicitly achieved
-    // Sort by target date descending (or completed date if we had one)
-    const completedGoals = [...rawCompletedGoals, ...implicitlyAchieved].sort((a, b) => new Date(b.target_date).getTime() - new Date(a.target_date).getTime());
+    // Completed Tab: Only explicitly completed/achieved goals
+    // Sort by completed_date descending (fall back to target_date)
+    const completedGoals = goals.filter(g => isCompletedStatus(g.status)).sort((a, b) => {
+        const dateA = a.completed_date || a.target_date;
+        const dateB = b.completed_date || b.target_date;
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
     const displayGoals = activeTab === 'completed' ? completedGoals : upcomingGoals;
 
     // Helper to render a goal card
     const renderGoalCard = (goal: Goal, isPrimaryView: boolean = false) => {
         const progress = Math.min(100, Math.max(0, (netWorth / goal.target_amount) * 100));
+        const isCompleted = isCompletedStatus(goal.status);
 
-        // Show status badge
-        const currentStatus = goal.status.toLowerCase();
-        const isCompleted = isCompletedStatus(goal.status) || (isActiveStatus(goal.status) && goal.target_amount <= netWorth);
+        // Format completed date for display
+        const completedDateDisplay = goal.completed_date
+            ? format(new Date(goal.completed_date), 'd MMM yyyy')
+            : null;
 
         return (
             <div key={goal.id} className={cn(
@@ -190,8 +187,16 @@ export default function GoalsPage() {
             )}>
                 <div className="flex justify-between items-start mb-6">
                     <div className="flex items-start gap-4">
-                        <div className={cn("p-3 rounded-xl border", isPrimaryView ? "bg-blue-500/10 border-blue-500/20" : "bg-slate-900 border-slate-800")}>
-                            <Target className={cn("w-6 h-6", isPrimaryView ? "text-blue-500" : "text-emerald-500")} />
+                        <div className={cn(
+                            "p-3 rounded-xl border",
+                            isCompleted ? "bg-emerald-500/10 border-emerald-500/20" :
+                            isPrimaryView ? "bg-blue-500/10 border-blue-500/20" : "bg-slate-900 border-slate-800"
+                        )}>
+                            {isCompleted ? (
+                                <Trophy className="w-6 h-6 text-emerald-500" />
+                            ) : (
+                                <Target className={cn("w-6 h-6", isPrimaryView ? "text-blue-500" : "text-emerald-500")} />
+                            )}
                         </div>
                         <div>
                             <div className="flex items-center gap-3">
@@ -210,13 +215,20 @@ export default function GoalsPage() {
                                 {!isPrimaryView && (
                                     <span className={cn(
                                         "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                        goal.status === 'active' ? "bg-emerald-500/10 text-emerald-500" :
-                                            goal.status === 'completed' ? "bg-blue-500/10 text-blue-500" : "bg-slate-800 text-slate-400"
+                                        isCompleted ? "bg-emerald-500/10 text-emerald-500" :
+                                            "bg-blue-500/10 text-blue-500"
                                     )}>
-                                        {goal.status}
+                                        {isCompleted ? 'ACHIEVED' : goal.status.toUpperCase()}
                                     </span>
                                 )}
                             </div>
+                            {/* Show when the goal was completed */}
+                            {isCompleted && completedDateDisplay && (
+                                <div className="flex items-center gap-1.5 text-xs text-emerald-400/70 mt-1.5">
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    Achieved on {completedDateDisplay}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -234,7 +246,7 @@ export default function GoalsPage() {
                         <button
                             onClick={() => toggleStatus(goal)}
                             className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                            title={goal.status === 'active' ? "Mark Complete" : "Mark Active"}
+                            title={isActiveStatus(goal.status) ? "Mark Complete" : "Mark Active"}
                         >
                             <CheckCircle className="w-4 h-4" />
                         </button>
@@ -261,7 +273,7 @@ export default function GoalsPage() {
                         <div className="text-right">
                             <div className="text-white font-bold text-xl">£{goal.target_amount.toLocaleString()}</div>
                             <div className="text-xs text-slate-500 mt-1">
-                                <span className={cn("font-medium", isPrimaryView ? "text-blue-500" : "text-emerald-500")}>{progress.toFixed(1)}%</span> achieved
+                                <span className={cn("font-medium", isCompleted ? "text-emerald-500" : isPrimaryView ? "text-blue-500" : "text-emerald-500")}>{progress.toFixed(1)}%</span> achieved
                             </div>
                         </div>
                     </div>
@@ -269,7 +281,12 @@ export default function GoalsPage() {
                     {/* Progress Bar */}
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
-                            className={cn("h-full rounded-full transition-all duration-1000 ease-out", isPrimaryView ? "bg-gradient-to-r from-blue-600 to-blue-400" : "bg-gradient-to-r from-emerald-600 to-emerald-400")}
+                            className={cn(
+                                "h-full rounded-full transition-all duration-1000 ease-out",
+                                isCompleted ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
+                                isPrimaryView ? "bg-gradient-to-r from-blue-600 to-blue-400" :
+                                "bg-gradient-to-r from-emerald-600 to-emerald-400"
+                            )}
                             style={{ width: `${progress}%` }}
                         />
                     </div>
