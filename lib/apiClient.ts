@@ -277,6 +277,11 @@ class ApiClient {
             method: 'POST',
         });
     }
+
+    // Investment Search
+    async searchInvestments(query: string, limit: number = 15): Promise<SearchResult[]> {
+        return this.request<SearchResult[]>(`/holdings/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+    }
 }
 
 export interface IncomeData {
@@ -284,6 +289,14 @@ export interface IncomeData {
     income: number;
     investment: number;
     created_at?: string;
+}
+
+export interface SearchResult {
+    symbol: string;
+    name: string;
+    type: string;      // 'stock' | 'etf' | 'fund' | 'crypto' | 'index'
+    exchange: string;
+    currency: string;
 }
 
 export const api = new ApiClient();

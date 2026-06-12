@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 // Update frontend to use 'added' or 'added_new'
 interface SyncResult {
@@ -8,7 +8,7 @@ interface SyncResult {
     deleted?: number;
     total_synced?: number;
 }
-import { api, Investment } from '@/lib/apiClient';
+import { api, Investment, SearchResult } from '@/lib/apiClient';
 
 interface PlatformData {
     name: string;
@@ -47,6 +47,14 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
     const dropdownRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Market search state (for new investments)
+    const [marketSearchResults, setMarketSearchResults] = useState<SearchResult[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showMarketDropdown, setShowMarketDropdown] = useState(false);
+    const [selectedMarketResult, setSelectedMarketResult] = useState<SearchResult | null>(null);
+    const marketDropdownRef = useRef<HTMLDivElement>(null);
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
     // Trading212 Form State
     const [apiKeyId, setApiKeyId] = useState('');
     const [apiSecretKey, setApiSecretKey] = useState('');
@@ -74,6 +82,9 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
             if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
                 setShowInvestmentDropdown(false);
             }
+            if (marketDropdownRef.current && !marketDropdownRef.current.contains(e.target as Node)) {
+                setShowMarketDropdown(false);
+            }
         }
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -86,7 +97,68 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
         setInvestmentSearch('');
         setName('');
         setSymbol('');
+        setSelectedMarketResult(null);
+        setMarketSearchResults([]);
+        setShowMarketDropdown(false);
     }, [platform, isNewPlatform]);
+
+    // Debounced market search when typing a new investment name
+    const performMarketSearch = useCallback((query: string) => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        if (!query || query.trim().length < 2) {
+            setMarketSearchResults([]);
+            setIsSearching(false);
+            setShowMarketDropdown(false);
+            return;
+        }
+
+        setIsSearching(true);
+        searchTimeoutRef.current = setTimeout(async () => {
+            try {
+                const results = await api.searchInvestments(query.trim(), 12);
+                setMarketSearchResults(results);
+                setShowMarketDropdown(results.length > 0);
+            } catch (err) {
+                console.error('Market search failed:', err);
+                setMarketSearchResults([]);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300);
+    }, []);
+
+    // Cleanup search timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    // Handle selecting a market search result
+    const handleSelectMarketResult = (result: SearchResult) => {
+        setSelectedMarketResult(result);
+        setName(result.name);
+        setSymbol(result.symbol);
+        setShowMarketDropdown(false);
+        setMarketSearchResults([]);
+    };
+
+    // Type badge colors
+    const getTypeBadge = (type: string) => {
+        switch (type) {
+            case 'stock': return { label: 'Stock', color: 'text-emerald-400 bg-emerald-400/10' };
+            case 'etf': return { label: 'ETF', color: 'text-blue-400 bg-blue-400/10' };
+            case 'crypto': return { label: 'Crypto', color: 'text-yellow-400 bg-yellow-400/10' };
+            case 'fund': return { label: 'Fund', color: 'text-purple-400 bg-purple-400/10' };
+            case 'index': return { label: 'Index', color: 'text-orange-400 bg-orange-400/10' };
+            default: return { label: type, color: 'text-slate-400 bg-slate-400/10' };
+        }
+    };
 
     const handleSelectExistingInvestment = (inv: Investment) => {
         setSelectedExistingInvestment(inv);
@@ -104,6 +176,8 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
         setSymbol('');
         setInvestmentSearch('');
         setShowInvestmentDropdown(false);
+        setSelectedMarketResult(null);
+        setMarketSearchResults([]);
         // Focus the input after state update
         setTimeout(() => inputRef.current?.focus(), 50);
     };
@@ -116,6 +190,9 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
             setSelectedExistingInvestment(null);
             setIsNewInvestment(false);
             setInvestmentSearch('');
+            setSelectedMarketResult(null);
+            setMarketSearchResults([]);
+            setShowMarketDropdown(false);
         }, 300);
     };
 
@@ -162,6 +239,9 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
             setSelectedExistingInvestment(null);
             setIsNewInvestment(false);
             setInvestmentSearch('');
+            setSelectedMarketResult(null);
+            setMarketSearchResults([]);
+            setShowMarketDropdown(false);
         } catch (err) {
             console.error(err);
             alert('Failed to add investment');
@@ -419,25 +499,95 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                             </div>
                                                         )}
                                                     </div>
-                                                ) : isNewInvestment ? (
-                                                    /* Free text input for new investment (after clicking "+ Add New") */
-                                                    <div className="relative">
-                                                        <input
-                                                            ref={inputRef}
-                                                            type="text"
-                                                            value={name}
-                                                            onChange={(e) => setName(e.target.value)}
-                                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                                                            placeholder="e.g. Tesla Stock"
-                                                            required
-                                                        />
-                                                        {hasPlatformInvestments && (
+                                                ) : (
+                                                    /* New investment input with market search autocomplete */
+                                                    <div className="relative" ref={marketDropdownRef}>
+                                                        <div className="relative">
+                                                            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                            </svg>
+                                                            <input
+                                                                ref={inputRef}
+                                                                type="text"
+                                                                value={name}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setName(val);
+                                                                    setSelectedMarketResult(null);
+                                                                    performMarketSearch(val);
+                                                                }}
+                                                                onFocus={() => {
+                                                                    if (marketSearchResults.length > 0) {
+                                                                        setShowMarketDropdown(true);
+                                                                    }
+                                                                }}
+                                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                                                                placeholder="Search stocks, ETFs, crypto..."
+                                                                required={!selectedExistingInvestment}
+                                                                autoComplete="off"
+                                                            />
+                                                            {isSearching && (
+                                                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                                                                    <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Market search results dropdown */}
+                                                        {showMarketDropdown && marketSearchResults.length > 0 && (
+                                                            <div className="absolute z-50 w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                                                                {marketSearchResults.map((result, idx) => {
+                                                                    const badge = getTypeBadge(result.type);
+                                                                    return (
+                                                                        <button
+                                                                            key={`${result.symbol}-${idx}`}
+                                                                            type="button"
+                                                                            onClick={() => handleSelectMarketResult(result)}
+                                                                            className="w-full px-3 py-2.5 text-left hover:bg-slate-800 transition-colors border-b border-slate-800/50 last:border-0"
+                                                                        >
+                                                                            <div className="flex items-center justify-between gap-2">
+                                                                                <div className="min-w-0 flex-1">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="text-sm text-white font-medium truncate">{result.name}</span>
+                                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.color}`}>
+                                                                                            {badge.label}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                                        <span className="text-slate-400 font-mono">{result.symbol}</span>
+                                                                                        {result.exchange && <> · {result.exchange}</>}
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Selected market result badge */}
+                                                        {selectedMarketResult && (
+                                                            <div className="mt-2 flex items-center gap-2 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                                                                <svg className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                                <span className="text-[11px] text-emerald-300">
+                                                                    Matched: {selectedMarketResult.symbol} · {selectedMarketResult.exchange} · Live price tracking enabled
+                                                                </span>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Back to existing investments link */}
+                                                        {isNewInvestment && hasPlatformInvestments && (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => {
                                                                     setIsNewInvestment(false);
                                                                     setInvestmentSearch('');
                                                                     setName('');
+                                                                    setSelectedMarketResult(null);
+                                                                    setMarketSearchResults([]);
+                                                                    setShowMarketDropdown(false);
                                                                 }}
                                                                 className="mt-1 text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
                                                             >
@@ -445,16 +595,6 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                             </button>
                                                         )}
                                                     </div>
-                                                ) : (
-                                                    /* Default free text (no platform selected, or new platform, or no existing investments) */
-                                                    <input
-                                                        type="text"
-                                                        value={name}
-                                                        onChange={(e) => setName(e.target.value)}
-                                                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                                                        placeholder="e.g. Tesla Stock"
-                                                        required={!selectedExistingInvestment}
-                                                    />
                                                 )}
                                             </div>
                                         </div>
@@ -541,11 +681,13 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                 onChange={(e) => setSymbol(e.target.value)}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                                                 placeholder="e.g. TSLA, BTC-USD"
-                                                disabled={!!selectedExistingInvestment?.symbol}
+                                                disabled={!!selectedExistingInvestment?.symbol || !!selectedMarketResult}
                                             />
                                             <p className="text-[10px] text-slate-500 mt-1">
                                                 {selectedExistingInvestment?.symbol
                                                     ? 'Symbol inherited from existing investment'
+                                                    : selectedMarketResult
+                                                    ? 'Symbol auto-filled from search'
                                                     : 'Required for live price updates'}
                                             </p>
                                         </div>
