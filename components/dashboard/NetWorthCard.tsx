@@ -88,6 +88,7 @@ export function NetWorthCard({
                                 separator=","
                                 decimals={0}
                                 prefix="£"
+                                preserveValue
                             />
                         </h1>
                         <button
