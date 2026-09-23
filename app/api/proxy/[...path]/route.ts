@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 
 const BASE = process.env.FINANCE_API_BASE_URL;
 const TOKEN = process.env.PERSONAL_API_TOKEN;
+const LOCAL_DEMO_MODE = process.env.NEXT_PUBLIC_LOCAL_DEMO_MODE === "true";
+type ProxyContext = { params: Promise<{ path?: string[] }> };
 
-async function proxy(req: Request, ctx: { params: Promise<{ path?: string[] }> }) {
+async function proxy(req: Request, ctx: ProxyContext) {
     if (!BASE) {
         return NextResponse.json(
             { error: "Missing FINANCE_API_BASE_URL" },
@@ -16,6 +18,16 @@ async function proxy(req: Request, ctx: { params: Promise<{ path?: string[] }> }
             { error: "Missing PERSONAL_API_TOKEN" },
             { status: 500 }
         );
+    }
+
+    if (LOCAL_DEMO_MODE) {
+        const hostname = new URL(BASE).hostname;
+        if (hostname !== "127.0.0.1" && hostname !== "localhost") {
+            return NextResponse.json(
+                { error: "Local demo mode requires a loopback API" },
+                { status: 500 }
+            );
+        }
     }
 
     // Next.js 15: params is a Promise
@@ -62,15 +74,18 @@ async function proxy(req: Request, ctx: { params: Promise<{ path?: string[] }> }
     }
 }
 
-export async function GET(req: Request, ctx: any) {
+export async function GET(req: Request, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function POST(req: Request, ctx: any) {
+export async function POST(req: Request, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function PUT(req: Request, ctx: any) {
+export async function PUT(req: Request, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function DELETE(req: Request, ctx: any) {
+export async function PATCH(req: Request, ctx: ProxyContext) {
+    return proxy(req, ctx);
+}
+export async function DELETE(req: Request, ctx: ProxyContext) {
     return proxy(req, ctx);
 }

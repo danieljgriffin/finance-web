@@ -104,7 +104,7 @@ export default function GoalsPage() {
             if (editingGoal) {
                 await api.updateGoal(editingGoal.id, formData);
             } else {
-                await api.createGoal(formData as any);
+                await api.createGoal(formData as Omit<Goal, 'id'>);
             }
             setIsModalOpen(false);
             fetchData();

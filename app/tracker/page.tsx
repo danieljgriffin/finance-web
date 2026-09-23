@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { api, MonthlyTrackerData } from '@/lib/apiClient';
-import { TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight, Plus, Edit2, Bot } from 'lucide-react';
+import { Plus, Edit2, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import IncomeInvestmentTable from '@/components/tracker/IncomeInvestmentTable';
 
@@ -35,6 +35,10 @@ export default function TrackerPage() {
                     setCurrentNetWorth(summary.total_networth);
                 }
 
+                const nestedData = typeof data === 'object' && data !== null && 'data' in data
+                    ? data.data
+                    : undefined;
+
                 if (Array.isArray(data)) {
                     setTrackerData(data);
 
@@ -50,8 +54,8 @@ export default function TrackerPage() {
                     if (distinctYears.length > 0 && !distinctYears.includes(selectedYear)) {
                         setSelectedYear(distinctYears[0]); // Selects the newest year (e.g. 2026) defaults
                     }
-                } else if (data && Array.isArray((data as any).data)) {
-                    setTrackerData((data as any).data);
+                } else if (Array.isArray(nestedData)) {
+                    setTrackerData(nestedData as MonthlyTrackerData[]);
                 } else {
                     setTrackerData([]);
                 }
@@ -333,7 +337,7 @@ export default function TrackerPage() {
             </div>
 
             {/* Income vs Investment Section */}
-            <IncomeInvestmentTable />
+            <IncomeInvestmentTable platforms={platforms} />
         </div>
     );
 }

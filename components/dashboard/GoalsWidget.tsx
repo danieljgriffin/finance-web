@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Goal } from '@/lib/apiClient';
-import { ArrowRight, CalendarClock, Coins, CheckCircle, Trophy } from 'lucide-react';
+import { ArrowRight, Coins, CheckCircle, Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/apiClient';
@@ -53,7 +53,15 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }
     const handleCompleteGoal = async () => {
         setIsCompleting(true);
         try {
-            // Trigger Confetti
+            const completedGoal = await api.updateGoal(currentGoal.id, { status: 'completed' });
+
+            // Move the dashboard to the next active goal immediately after the
+            // backend confirms completion. A background refetch then reconciles
+            // the cache with the server without leaving the reached-goal card stuck.
+            queryClient.setQueryData<Goal[]>(['goals'], (cachedGoals) =>
+                cachedGoals?.map((goal) => goal.id === completedGoal.id ? completedGoal : goal)
+            );
+
             confetti({
                 particleCount: 150,
                 spread: 70,
@@ -61,16 +69,10 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }
                 colors: ['#3b82f6', '#22d3ee', '#10b981', '#f59e0b', '#ec4899']
             });
 
-            // Update Backend
-            await api.updateGoal(currentGoal.id, { status: 'completed' });
-            
-            // Wait a moment for UX
-            setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ['goals'] });
-                setIsCompleting(false);
-            }, 2000);
+            await queryClient.invalidateQueries({ queryKey: ['goals'] });
         } catch (error) {
             console.error("Failed to complete goal:", error);
+        } finally {
             setIsCompleting(false);
         }
     };
@@ -93,7 +95,7 @@ export function GoalsWidget({ goals, isLoading, currentNetWorth, isPrivacyMode }
                         </div>
                         <h3 className="text-xl font-bold text-white mb-1">Goal Reached! 🎉</h3>
                         <p className="text-sm text-blue-200/70 mb-5">
-                            You've hit your target of <span className={`font-semibold text-blue-200 ${isPrivacyMode ? 'blur-sm' : ''}`}>£{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</span>
+                            You&apos;ve hit your target of <span className={`font-semibold text-blue-200 ${isPrivacyMode ? 'blur-sm' : ''}`}>£{currentGoal.target_amount.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</span>
                         </p>
                         <button 
                             onClick={handleCompleteGoal}

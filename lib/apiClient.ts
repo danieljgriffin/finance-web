@@ -33,6 +33,20 @@ export interface PlatformCash {
     last_updated?: string;
 }
 
+export interface PortfolioPerformancePeriod {
+    amount: number;
+    percent: number;
+    contributions: number;
+    withdrawals: number;
+    start_value: number;
+    current_value: number;
+}
+
+export interface PortfolioPerformanceSummary {
+    month: PortfolioPerformancePeriod;
+    year: PortfolioPerformancePeriod;
+}
+
 export interface NetWorthDashboardSummary {
     total_networth: number;
     platform_breakdown: Record<string, number>;
@@ -46,6 +60,62 @@ export interface NetWorthDashboardSummary {
         month_change_amount: number;
         month_change_percent: number;
     }[];
+    portfolio_performance?: PortfolioPerformanceSummary;
+}
+
+export type CashflowMovementType = 'contribution' | 'withdrawal' | 'transfer';
+
+export interface CashflowMovement {
+    id: number;
+    effective_date: string;
+    amount: number;
+    flow_type: CashflowMovementType;
+    source_platform?: string | null;
+    destination_platform?: string | null;
+    note?: string | null;
+    created_at: string;
+}
+
+export interface CreateCashflowMovement {
+    effective_date: string;
+    amount: number;
+    flow_type: Exclude<CashflowMovementType, 'contribution'>;
+    source_platform?: string;
+    destination_platform?: string;
+    note?: string;
+    event_key?: string;
+}
+
+export interface CreateTrackerEntry {
+    entry_key: string;
+    income_amount?: number;
+    income_date?: string;
+    investment_amount?: number;
+    investment_date?: string;
+    destination_platform?: string;
+    note?: string;
+}
+
+export interface TrackerEntry {
+    id: number;
+    entry_key: string;
+    income_amount: number;
+    income_date?: string | null;
+    investment_amount: number;
+    investment_date?: string | null;
+    destination_platform?: string | null;
+    note?: string | null;
+    created_at: string;
+}
+
+export interface Trading212SyncResult {
+    status?: string;
+    added?: number;
+    added_new?: number;
+    updated?: number;
+    deleted?: number;
+    deleted_old?: number;
+    total_synced?: number;
 }
 
 export interface NetWorthSummary {
@@ -144,9 +214,7 @@ class ApiClient {
     }
 
     async getDashboardSummary() {
-        // If this endpoint doesn't exist yet, we might fallback to summary, but the plan said use /net-worth/dashboard-summary
-        // checking net_worth.py, we saw @router.get("/dashboard-summary")
-        return this.request<any>('/net-worth/dashboard-summary');
+        return this.request<NetWorthDashboardSummary>('/net-worth/dashboard-summary');
     }
 
     async getNetWorthHistory(year: number | 'all') {
@@ -162,15 +230,15 @@ class ApiClient {
     }
 
     async getIntradayHistory(hours: number) {
-        return this.request<any>(`/net-worth/history/intraday/${hours}`);
+        return this.request<unknown>(`/net-worth/history/intraday/${hours}`);
     }
 
     async triggerIntradaySnapshot() {
-        return this.request<any>('/net-worth/snapshot/intraday', { method: 'POST' });
+        return this.request<unknown>('/net-worth/snapshot/intraday', { method: 'POST' });
     }
 
     async getMonthlyTracker() {
-        return this.request<any>('/net-worth/monthly-tracker');
+        return this.request<unknown>('/net-worth/monthly-tracker');
     }
 
 
@@ -179,7 +247,7 @@ class ApiClient {
         return this.request<Record<string, Investment[]>>('/holdings/');
     }
 
-    async addInvestment(investment: any) {
+    async addInvestment(investment: Omit<Investment, 'id' | 'last_updated'>) {
         return this.request<Investment>('/holdings/', {
             method: 'POST',
             body: JSON.stringify(investment),
@@ -211,19 +279,19 @@ class ApiClient {
     }
 
     async renamePlatform(oldName: string, newName: string) {
-        return this.request<any>(`/holdings/platform/rename?old_name=${encodeURIComponent(oldName)}&new_name=${encodeURIComponent(newName)}`, {
+        return this.request<unknown>(`/holdings/platform/rename?old_name=${encodeURIComponent(oldName)}&new_name=${encodeURIComponent(newName)}`, {
             method: 'POST',
         });
     }
 
     async updatePlatformColor(platform: string, color: string) {
-        return this.request<any>(`/holdings/platform/color?platform=${encodeURIComponent(platform)}&color=${encodeURIComponent(color)}`, {
+        return this.request<unknown>(`/holdings/platform/color?platform=${encodeURIComponent(platform)}&color=${encodeURIComponent(color)}`, {
             method: 'POST',
         });
     }
 
     async importTrading212(apiKeyId: string, apiSecretKey: string) {
-        return this.request<any>('/holdings/import/trading212', {
+        return this.request<Trading212SyncResult>('/holdings/import/trading212', {
             method: 'POST',
             body: JSON.stringify({
                 api_key_id: apiKeyId,
@@ -237,7 +305,7 @@ class ApiClient {
     }
 
     async refreshPrices() {
-        return this.request<any>('/holdings/refresh-prices', {
+        return this.request<unknown>('/holdings/refresh-prices', {
             method: 'POST',
         });
     }
@@ -272,9 +340,34 @@ class ApiClient {
         return this.request<IncomeData[]>('/cashflow/income');
     }
 
-    async updateIncomeData(year: string, income: number, investment: number) {
-        return this.request<IncomeData>(`/cashflow/income?year=${encodeURIComponent(year)}&income=${income}&investment=${investment}`, {
+    async updateIncomeData(year: string, income: number, investment: number, effectiveDate?: string) {
+        const params = new URLSearchParams({
+            year,
+            income: String(income),
+            investment: String(investment),
+        });
+        if (effectiveDate) params.set('effective_date', effectiveDate);
+
+        return this.request<IncomeData>(`/cashflow/income?${params.toString()}`, {
             method: 'POST',
+        });
+    }
+
+    async getCashflowMovements() {
+        return this.request<CashflowMovement[]>('/cashflow/movements');
+    }
+
+    async createCashflowMovement(movement: CreateCashflowMovement) {
+        return this.request<CashflowMovement>('/cashflow/movements', {
+            method: 'POST',
+            body: JSON.stringify(movement),
+        });
+    }
+
+    async createTrackerEntry(entry: CreateTrackerEntry) {
+        return this.request<TrackerEntry>('/cashflow/tracker-entries', {
+            method: 'POST',
+            body: JSON.stringify(entry),
         });
     }
 

@@ -19,9 +19,9 @@ export function PlatformBreakdown({ summary, isLoading, isPrivacyMode }: Platfor
     }
 
     // Use the platforms array from the new API response structure if available
-    const platformsData = (summary as any).platforms || [];
+    const platformsData = summary.platforms || [];
     // Sort by value desc
-    const sortedPlatforms = [...platformsData].sort((a: any, b: any) => b.value - a.value);
+    const sortedPlatforms = [...platformsData].sort((a, b) => b.value - a.value);
     const total = summary.total_networth;
 
     return (
@@ -38,7 +38,7 @@ export function PlatformBreakdown({ summary, isLoading, isPrivacyMode }: Platfor
             </p>
 
             <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar flex-grow">
-                {sortedPlatforms.map((p: any) => {
+                {sortedPlatforms.map((p) => {
                     const percentOfTotal = (p.value / total) * 100;
                     const colorClass = PLATFORM_COLORS[p.platform] || 'bg-slate-500';
 

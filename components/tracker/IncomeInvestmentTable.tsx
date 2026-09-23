@@ -1,14 +1,32 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { api, IncomeData } from '@/lib/apiClient';
-import { Edit2, Save, X, Plus, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { api, CreateCashflowMovement, CreateTrackerEntry, IncomeData } from '@/lib/apiClient';
+import { Edit2, LoaderCircle, Save, X, Plus, Trash2 } from 'lucide-react';
+import { RecordActivityModal } from '@/components/tracker/RecordActivityModal';
 
-export default function IncomeInvestmentTable() {
+function getLocalDateValue() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+interface IncomeInvestmentTableProps {
+    platforms?: string[];
+}
+
+export default function IncomeInvestmentTable({ platforms = [] }: IncomeInvestmentTableProps) {
     const [data, setData] = useState<IncomeData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+    const [isRecordingActivity, setIsRecordingActivity] = useState(false);
+    const saveInFlightRef = useRef(false);
+    const queryClient = useQueryClient();
 
     // Edit state
     const [editData, setEditData] = useState<IncomeData[]>([]);
@@ -43,23 +61,55 @@ export default function IncomeInvestmentTable() {
     };
 
     const handleSave = async () => {
+        if (saveInFlightRef.current) return;
+
+        const years = editData.map((item) => item.year.trim());
+        if (years.some((year) => !/^\d{4}$/.test(year))) {
+            alert('Each row needs a valid four-digit year.');
+            return;
+        }
+        if (new Set(years).size !== years.length) {
+            alert('Each year can only appear once.');
+            return;
+        }
+
+        const originalsByYear = new Map(data.map((item) => [item.year, item]));
+        const changedRows = editData.filter((item) => {
+            const original = originalsByYear.get(item.year);
+            return !original
+                || Number(original.income) !== Number(item.income)
+                || Number(original.investment) !== Number(item.investment);
+        });
+
+        if (changedRows.length === 0) {
+            setIsEditing(false);
+            return;
+        }
+
+        saveInFlightRef.current = true;
+        setIsSaving(true);
         try {
-            setIsLoading(true);
-            // Save all rows that changed
-            // In a real app we might batch this or only save changes. 
-            // The API updates one by one.
-            const promises = editData.map(item =>
-                api.updateIncomeData(item.year, item.income, item.investment)
+            const effectiveDate = getLocalDateValue();
+            const effectiveYear = effectiveDate.slice(0, 4);
+            const promises = changedRows.map(item =>
+                api.updateIncomeData(
+                    item.year,
+                    item.income,
+                    item.investment,
+                    item.year === effectiveYear ? effectiveDate : undefined,
+                )
             );
             await Promise.all(promises);
 
             await fetchData(); // Refresh
+            await queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
             setIsEditing(false);
         } catch (error) {
             console.error("Failed to save data", error);
             alert("Failed to save changes");
         } finally {
-            setIsLoading(false);
+            saveInFlightRef.current = false;
+            setIsSaving(false);
         }
     };
 
@@ -69,8 +119,35 @@ export default function IncomeInvestmentTable() {
         setEditData(newData);
     };
 
+    const refreshAfterActivity = async () => {
+        await fetchData();
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] }),
+            queryClient.invalidateQueries({ queryKey: ['cashflowMovements'] }),
+        ]);
+    };
+
+    const handleSaveTrackerEntry = async (entry: CreateTrackerEntry) => {
+        setIsRecordingActivity(true);
+        try {
+            await api.createTrackerEntry(entry);
+            await refreshAfterActivity();
+        } finally {
+            setIsRecordingActivity(false);
+        }
+    };
+
+    const handleSaveMovement = async (movement: CreateCashflowMovement) => {
+        setIsRecordingActivity(true);
+        try {
+            await api.createCashflowMovement(movement);
+            await refreshAfterActivity();
+        } finally {
+            setIsRecordingActivity(false);
+        }
+    };
+
     const addNewRow = () => {
-        const nextYear = (new Date().getFullYear()).toString();
         // Check if exists, if so increment? Or just let user type.
         // User can type the year.
         setEditData([...editData, { year: '', income: 0, investment: 0 }]);
@@ -111,30 +188,42 @@ export default function IncomeInvestmentTable() {
                     <h2 className="text-xl font-bold text-white">Income vs Investments Overview</h2>
                     <p className="text-slate-400 text-sm">Track yearly take-home income and investment amounts</p>
                 </div>
-                <div>
+                <div className="flex items-center gap-2">
                     {!isEditing ? (
-                        <button
-                            onClick={handleEdit}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                            Edit
-                        </button>
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setIsActivityModalOpen(true)}
+                                className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300 transition-colors hover:border-emerald-400/50 hover:bg-emerald-500/15"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Record activity
+                            </button>
+                            <button
+                                onClick={handleEdit}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                                Edit totals
+                            </button>
+                        </>
                     ) : (
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={handleCancel}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+                                disabled={isSaving}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <X className="w-4 h-4" />
                                 Cancel
                             </button>
                             <button
                                 onClick={handleSave}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors"
+                                disabled={isSaving}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                <Save className="w-4 h-4" />
-                                Save
+                                {isSaving ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                {isSaving ? 'Saving…' : 'Save'}
                             </button>
                         </div>
                     )}
@@ -252,6 +341,16 @@ export default function IncomeInvestmentTable() {
                     )}
                 </div>
             </div>
+
+            {isActivityModalOpen && (
+                <RecordActivityModal
+                    platforms={platforms.filter((platform) => platform.trim().toLowerCase() !== 'cash')}
+                    isSaving={isRecordingActivity}
+                    onClose={() => setIsActivityModalOpen(false)}
+                    onSaveEntry={handleSaveTrackerEntry}
+                    onSaveMovement={handleSaveMovement}
+                />
+            )}
         </div>
     );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/apiClient';
+import { api, HistoricalDataPoint } from '@/lib/apiClient';
 import { NetWorthCard } from '@/components/dashboard/NetWorthCard';
 import { PlatformBreakdown } from '@/components/dashboard/PlatformBreakdown';
 import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
@@ -12,8 +12,10 @@ export default function Dashboard() {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const queryClient = useQueryClient();
 
-  // Trigger backend price refresh on mount (fire and forget)
+  // Production keeps live prices fresh; isolated local demos never call market services.
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_LOCAL_DEMO_MODE === 'true') return;
+
     // We don't await this to avoid blocking UI rendering
     api.refreshPrices().then(() => {
       // After backend refresh, invalidate cache to refetch updated numbers
@@ -29,7 +31,7 @@ export default function Dashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // 2. Goals
+  // 3. Goals
   const { data: goals, isLoading: isLoadingGoals, isError: isGoalsError, error: goalsError } = useQuery({
     queryKey: ['goals'],
     queryFn: () => api.getGoals(),
@@ -40,7 +42,7 @@ export default function Dashboard() {
     console.error("Goals Query Error Object:", goalsError);
   }
 
-  // 3. Chart Data (Depends on Time Range)
+  // 4. Chart Data (Depends on Time Range)
   const { data: rawChartData, isLoading: isLoadingChart } = useQuery({
     queryKey: ['chart', timeRange],
     queryFn: () => api.getGraphData(timeRange),
@@ -53,10 +55,17 @@ export default function Dashboard() {
   let chartData: { date: string; value: number }[] = [];
 
   if (rawChartData && rawChartData.length > 0) {
-    chartData = rawChartData.map((d: any) => ({
-      date: d.date || d.month || d.timestamp,
-      value: d.value || d.total_networth || 0
-    }));
+    chartData = rawChartData.map((dataPoint) => {
+      const point = dataPoint as HistoricalDataPoint & {
+        month?: string;
+        timestamp?: string;
+        total_networth?: number;
+      };
+      return {
+        date: point.date || point.month || point.timestamp || '',
+        value: point.value ?? point.total_networth ?? 0,
+      };
+    });
   } else if (!isLoadingChart && (timeRange === '24H' || timeRange === '1W')) {
     // Fallback if API returns empty for short periods (new user)
     const now = new Date();
@@ -83,11 +92,11 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="grid grid-cols-12 gap-6 h-[calc(100vh-6rem)]">
+    <div className="grid min-h-[calc(100vh-6rem)] grid-cols-12 gap-6 2xl:h-[calc(100vh-6rem)]">
       {/* Main Panel (Net Worth + Chart) - Spans 6 columns (50%) */}
-      <div className="col-span-12 lg:col-span-6 h-full">
+      <div className="col-span-12 min-h-[620px] 2xl:col-span-6 2xl:h-full 2xl:min-h-0">
         <NetWorthCard
-          summary={summary}
+          summary={summary ?? null}
           chartData={chartData}
           isLoading={isLoadingSummary || isLoadingChart} // Show loading on card if chart is updating
           onTimeRangeChange={setTimeRange} // Now updates state -> triggers query
@@ -97,16 +106,16 @@ export default function Dashboard() {
       </div>
 
       {/* Breakdown Panel - Spans 3 columns (25%) */}
-      <div className="col-span-12 lg:col-span-3 h-full">
+      <div className="col-span-12 min-h-[420px] md:col-span-6 2xl:col-span-3 2xl:h-full 2xl:min-h-0">
         <PlatformBreakdown
-          summary={summary}
+          summary={summary ?? null}
           isLoading={isLoadingSummary}
           isPrivacyMode={isPrivacyMode}
         />
       </div>
 
       {/* Goals Panel - Spans 3 columns (25%) */}
-      <div className="col-span-12 lg:col-span-3 h-full">
+      <div className="col-span-12 min-h-[420px] md:col-span-6 2xl:col-span-3 2xl:h-full 2xl:min-h-0">
         <GoalsWidget
           goals={goals || []}
           isLoading={isLoadingGoals}
