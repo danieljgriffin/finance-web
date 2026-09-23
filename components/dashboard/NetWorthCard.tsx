@@ -76,45 +76,6 @@ export function NetWorthCard({
             {/* Background Glow Effect - Optional but matches premium look */}
             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
-            {/* Metric mode */}
-            <div className="relative z-10 mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div
-                    role="group"
-                    aria-label="Dashboard metric"
-                    className="inline-flex w-fit rounded-xl border border-slate-800 bg-slate-950/70 p-1"
-                >
-                    <button
-                        type="button"
-                        aria-pressed={metricMode === 'net_worth'}
-                        onClick={() => setMetricMode('net_worth')}
-                        className={cn(
-                            'rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all',
-                            metricMode === 'net_worth'
-                                ? 'bg-slate-700 text-white shadow-sm'
-                                : 'text-slate-500 hover:text-slate-200'
-                        )}
-                    >
-                        Net worth
-                    </button>
-                    <button
-                        type="button"
-                        aria-pressed={metricMode === 'performance'}
-                        onClick={() => setMetricMode('performance')}
-                        disabled={!performance}
-                        className={cn(
-                            'rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all',
-                            metricMode === 'performance'
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                                : 'text-slate-500 hover:text-slate-200',
-                            !performance && 'cursor-not-allowed opacity-40'
-                        )}
-                    >
-                        Portfolio performance
-                    </button>
-                </div>
-
-            </div>
-
             {/* Header Section */}
             <div className="relative z-10 mb-6 flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
                 <div>
@@ -144,44 +105,81 @@ export function NetWorthCard({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-8 text-left sm:text-right xl:min-w-[260px]">
-                    <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
-                            {isPerformanceMode ? 'Month return' : 'This month'}
+                <div className="flex flex-col items-start gap-3 sm:items-end xl:min-w-[260px]">
+                    <div className="grid w-full grid-cols-2 gap-8 text-left sm:text-right">
+                        <div>
+                            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
+                                This month
+                            </div>
+                            <div className={cn(
+                                'text-lg font-medium transition-all',
+                                monthAmount >= 0 ? 'text-emerald-400' : 'text-rose-400',
+                                isPrivacyMode && 'blur-sm select-none'
+                            )}>
+                                {renderSignedCurrency(monthAmount)}
+                            </div>
+                            <div className={cn(
+                                'text-xs font-medium transition-all',
+                                monthAmount >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80',
+                                isPrivacyMode && 'blur-sm select-none'
+                            )}>
+                                ({formatPercent(monthPercent)})
+                            </div>
                         </div>
-                        <div className={cn(
-                            'text-lg font-medium transition-all',
-                            monthAmount >= 0 ? 'text-emerald-400' : 'text-rose-400',
-                            isPrivacyMode && 'blur-sm select-none'
-                        )}>
-                            {renderSignedCurrency(monthAmount)}
-                        </div>
-                        <div className={cn(
-                            'text-xs font-medium transition-all',
-                            monthAmount >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80',
-                            isPrivacyMode && 'blur-sm select-none'
-                        )}>
-                            ({formatPercent(monthPercent)})
+                        <div>
+                            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
+                                This year
+                            </div>
+                            <div className={cn(
+                                'text-lg font-medium transition-all',
+                                yearAmount >= 0 ? 'text-emerald-400' : 'text-rose-400',
+                                isPrivacyMode && 'blur-sm select-none'
+                            )}>
+                                {renderSignedCurrency(yearAmount)}
+                            </div>
+                            <div className={cn(
+                                'text-xs font-medium transition-all',
+                                yearAmount >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80',
+                                isPrivacyMode && 'blur-sm select-none'
+                            )}>
+                                ({formatPercent(yearPercent)})
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
-                            {isPerformanceMode ? 'Year return' : 'This year'}
-                        </div>
-                        <div className={cn(
-                            'text-lg font-medium transition-all',
-                            yearAmount >= 0 ? 'text-emerald-400' : 'text-rose-400',
-                            isPrivacyMode && 'blur-sm select-none'
-                        )}>
-                            {renderSignedCurrency(yearAmount)}
-                        </div>
-                        <div className={cn(
-                            'text-xs font-medium transition-all',
-                            yearAmount >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80',
-                            isPrivacyMode && 'blur-sm select-none'
-                        )}>
-                            ({formatPercent(yearPercent)})
-                        </div>
+
+                    <div
+                        role="group"
+                        aria-label="Period metric"
+                        className="inline-flex rounded-lg border border-slate-800 bg-slate-950/70 p-0.5"
+                    >
+                        <button
+                            type="button"
+                            aria-pressed={metricMode === 'net_worth'}
+                            onClick={() => setMetricMode('net_worth')}
+                            className={cn(
+                                'rounded-md px-3 py-1 text-[11px] font-semibold transition-all',
+                                metricMode === 'net_worth'
+                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-200'
+                            )}
+                        >
+                            Change
+                        </button>
+                        <button
+                            type="button"
+                            aria-pressed={metricMode === 'performance'}
+                            onClick={() => setMetricMode('performance')}
+                            disabled={!performance}
+                            className={cn(
+                                'rounded-md px-3 py-1 text-[11px] font-semibold transition-all',
+                                metricMode === 'performance'
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                                    : 'text-slate-500 hover:text-slate-200',
+                                !performance && 'cursor-not-allowed opacity-40'
+                            )}
+                        >
+                            Return
+                        </button>
                     </div>
                 </div>
             </div>
