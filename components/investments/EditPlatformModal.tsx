@@ -118,10 +118,10 @@ export function EditPlatformModal({ platformName, isOpen, onClose, onSave }: Edi
                 </form>
 
                 {/* Trading212 Auto-Sync Section */}
-                {platformName === 'Trading212 ISA' && (
+                {(platformName === 'Trading212 ISA' || platformName === 'Trading212 GIA') && (
                     <div className="mt-6 pt-6 border-t border-slate-800">
                         <h3 className="text-sm font-bold text-white mb-4">Auto-Sync Settings</h3>
-                        <Trading212SyncSettings />
+                        <Trading212SyncSettings accountType={platformName === 'Trading212 GIA' ? 'gia' : 'isa'} />
                     </div>
                 )}
             </div>
@@ -129,43 +129,39 @@ export function EditPlatformModal({ platformName, isOpen, onClose, onSave }: Edi
     );
 }
 
-function Trading212SyncSettings() {
+function Trading212SyncSettings({ accountType }: { accountType: 'isa' | 'gia' }) {
     const [enabled, setEnabled] = useState(false);
+    const [accountId, setAccountId] = useState<string | null>(null);
     const [apiKeyId, setApiKeyId] = useState('');
     const [apiSecretKey, setApiSecretKey] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [statusMsg, setStatusMsg] = useState('');
 
     useEffect(() => {
-        // Check current status
-        // Check current status
-        api.request<{ enabled: boolean }>('/holdings/config/trading212')
-            .then(data => setEnabled(data.enabled))
+        api.request<{ enabled: boolean; account_id?: string | null }>(`/holdings/config/trading212?account_type=${accountType}`)
+            .then(data => {
+                setEnabled(data.enabled);
+                setAccountId(data.account_id || null);
+            })
             .catch(err => console.error(err));
-    }, []);
+    }, [accountType]);
 
     const handleSaveConfig = async () => {
         setIsLoading(true);
         setStatusMsg('');
         try {
-            const data = await api.request<{ status: string }>('/holdings/config/trading212', {
-                method: 'POST',
-                // Content-Type is handled by apiClient
-                body: JSON.stringify({
-                    api_key_id: apiKeyId,
-                    api_secret_key: apiSecretKey
-                })
-            });
+            const data = await api.importTrading212(apiKeyId, apiSecretKey, accountType);
             if (data.status === 'success') {
-                setStatusMsg('Saved & Enabled!');
+                setStatusMsg(`${data.platform || 'Trading 212'} connected and synced.`);
                 setEnabled(true);
+                setAccountId(data.account_id || null);
                 setApiKeyId(''); // Clear for security
                 setApiSecretKey('');
             } else {
                 setStatusMsg('Error saving config');
             }
-        } catch (e) {
-            setStatusMsg('Network error');
+        } catch (error: unknown) {
+            setStatusMsg(error instanceof Error ? error.message : 'Connection failed');
         } finally {
             setIsLoading(false);
         }
@@ -174,9 +170,10 @@ function Trading212SyncSettings() {
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Enable Background Sync (Every 15s)</span>
+                <span className="text-sm text-slate-400">Background sync every 5 minutes</span>
                 <div className={`w-3 h-3 rounded-full ${enabled ? 'bg-green-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-600'}`} />
             </div>
+            {accountId && <p className="text-xs text-slate-500">Trading 212 account {accountId}</p>}
 
             <div className="space-y-3">
                 <input

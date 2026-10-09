@@ -1,13 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-// Update frontend to use 'added' or 'added_new'
-interface SyncResult {
-    status: string;
-    added?: number;
-    updated?: number;
-    deleted?: number;
-    total_synced?: number;
-}
 import { api, Investment, SearchResult } from '@/lib/apiClient';
 
 interface PlatformData {
@@ -58,6 +50,7 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
     // Trading212 Form State
     const [apiKeyId, setApiKeyId] = useState('');
     const [apiSecretKey, setApiSecretKey] = useState('');
+    const [trading212AccountType, setTrading212AccountType] = useState<'isa' | 'gia'>('gia');
 
     // Get investments for the selected platform
     const platformInvestments = useMemo(() => {
@@ -193,6 +186,9 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
             setSelectedMarketResult(null);
             setMarketSearchResults([]);
             setShowMarketDropdown(false);
+            setApiKeyId('');
+            setApiSecretKey('');
+            setTrading212AccountType('gia');
         }, 300);
     };
 
@@ -255,8 +251,15 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
         setIsLoading(true);
 
         try {
-            const result = await api.importTrading212(apiKeyId, apiSecretKey);
-            alert(`Successfully synced! Added: ${result.added || result.added_new || 0}, Deleted Old: ${result.deleted || result.deleted_old || 0}`);
+            const result = await api.importTrading212(
+                apiKeyId,
+                apiSecretKey,
+                trading212AccountType,
+            );
+            const cashMessage = result.cash_balance != null
+                ? ` Cash: £${result.cash_balance.toFixed(2)}.`
+                : '';
+            alert(`${result.platform || 'Trading 212'} connected successfully.${cashMessage}`);
             onSave();
             handleClose();
         } catch (err: unknown) {
@@ -713,19 +716,39 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
 
                                 {view === 'trading212' && (
                                     <form onSubmit={handleT212Submit} className="space-y-6">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-2">Account to connect</label>
+                                            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-950 p-1 border border-slate-800">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setTrading212AccountType('gia')}
+                                                    className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${trading212AccountType === 'gia' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                                >
+                                                    General Invest
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setTrading212AccountType('isa')}
+                                                    className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${trading212AccountType === 'isa' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                                >
+                                                    Stocks ISA
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 mb-4 space-y-3">
                                             <h4 className="text-sm font-semibold text-white">How to connect:</h4>
                                             <ol className="list-decimal list-inside space-y-2 text-xs text-slate-300">
-                                                <li>Open <strong>Trading 212</strong> and go to <strong>Settings</strong></li>
-                                                <li>Navigate to <strong>API</strong> and click <strong>Generate Key</strong></li>
-                                                <li>Ensure the following permissions are selected:
+                                                <li>Open Trading 212 and switch to your <strong>{trading212AccountType === 'gia' ? 'General Invest' : 'Stocks ISA'}</strong> account</li>
+                                                <li>Go to <strong>Settings</strong> → <strong>API (Beta)</strong></li>
+                                                <li>Click <strong>Generate API key</strong></li>
+                                                <li>Enable read-only access for:
                                                     <ul className="list-disc list-inside ml-4 mt-1 text-slate-400">
                                                         <li>Account Data</li>
-                                                        <li>History</li>
                                                         <li>Portfolio</li>
                                                     </ul>
                                                 </li>
-                                                <li>Copy your API Key details below</li>
+                                                <li>Copy the new API Key ID and Secret below</li>
                                             </ol>
                                         </div>
 
@@ -752,7 +775,7 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                     placeholder="Enter your Secret Key"
                                                     required
                                                 />
-                                                <p className="text-[10px] text-slate-500 mt-1">If you only have one key, paste it in &quot;Secret Key&quot;.</p>
+                                                <p className="text-[10px] text-slate-500 mt-1">The secret is encrypted and stored only by your backend.</p>
                                             </div>
                                         </div>
 
@@ -769,7 +792,7 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                 disabled={isLoading}
                                                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-500 transition-colors disabled:opacity-50"
                                             >
-                                                {isLoading ? 'Syncing...' : 'Connect & Sync'}
+                                                {isLoading ? 'Connecting...' : `Connect ${trading212AccountType === 'gia' ? 'GIA' : 'ISA'} & Sync`}
                                             </button>
                                         </div>
                                     </form>

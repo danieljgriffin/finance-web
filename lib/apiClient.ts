@@ -110,6 +110,11 @@ export interface TrackerEntry {
 
 export interface Trading212SyncResult {
     status?: string;
+    message?: string;
+    platform?: string;
+    account_type?: 'isa' | 'gia';
+    account_id?: string | null;
+    cash_balance?: number | null;
     added?: number;
     added_new?: number;
     updated?: number;
@@ -290,12 +295,13 @@ class ApiClient {
         });
     }
 
-    async importTrading212(apiKeyId: string, apiSecretKey: string) {
+    async importTrading212(apiKeyId: string, apiSecretKey: string, accountType: 'isa' | 'gia' = 'isa') {
         return this.request<Trading212SyncResult>('/holdings/import/trading212', {
             method: 'POST',
             body: JSON.stringify({
                 api_key_id: apiKeyId,
-                api_secret_key: apiSecretKey
+                api_secret_key: apiSecretKey,
+                account_type: accountType,
             }),
         });
     }
