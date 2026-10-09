@@ -36,6 +36,7 @@ export default function InvestmentsPage() {
     const { data, isLoading: isLoadingHoldings, isError, error } = useQuery<PortfolioSummary>({
         queryKey: ['portfolio'],
         queryFn: () => api.fetch<PortfolioSummary>('/holdings/portfolio'),
+        refetchInterval: 30000,
     });
 
     // Mutations
