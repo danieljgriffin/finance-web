@@ -20,8 +20,13 @@ export function PlatformBreakdown({ summary, isLoading, isPrivacyMode }: Platfor
 
     // Use the platforms array from the new API response structure if available
     const platformsData = summary.platforms || [];
-    // Sort by value desc
-    const sortedPlatforms = [...platformsData].sort((a, b) => b.value - a.value);
+    // Sort by value descending, but keep standalone Cash at the bottom.
+    const sortedPlatforms = [...platformsData].sort((a, b) => {
+        const aIsCash = a.platform.trim().toLowerCase() === 'cash';
+        const bIsCash = b.platform.trim().toLowerCase() === 'cash';
+        if (aIsCash !== bIsCash) return aIsCash ? 1 : -1;
+        return b.value - a.value || a.platform.localeCompare(b.platform);
+    });
     const total = summary.total_networth;
 
     return (
