@@ -11,6 +11,14 @@ const MONTHS = [
     '1st Jul', '1st Aug', '1st Sep', '1st Oct', '1st Nov', '1st Dec'
 ];
 
+function sortPlatformNames(names: string[]) {
+    return names.sort((a, b) => {
+        if (a.trim().toLowerCase() === 'cash') return 1;
+        if (b.trim().toLowerCase() === 'cash') return -1;
+        return a.localeCompare(b);
+    });
+}
+
 export default function TrackerPage() {
     const [trackerData, setTrackerData] = useState<MonthlyTrackerData[] | null>(null);
     const [customColors, setCustomColors] = useState<Record<string, string>>({});
@@ -19,18 +27,21 @@ export default function TrackerPage() {
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [currentNetWorth, setCurrentNetWorth] = useState<number>(0);
+    const [registeredPlatforms, setRegisteredPlatforms] = useState<string[]>([]);
 
     useEffect(() => {
         async function fetchData() {
             try {
                 setIsLoading(true);
-                const [data, colors, summary] = await Promise.all([
+                const [data, colors, summary, holdings] = await Promise.all([
                     api.getMonthlyTracker(),
                     api.getPlatformColors(),
-                    api.getNetWorthSummary()
+                    api.getNetWorthSummary(),
+                    api.getHoldings(),
                 ]);
 
                 setCustomColors(colors || {});
+                setRegisteredPlatforms(Object.keys(holdings || {}));
                 if (summary && summary.total_networth) {
                     setCurrentNetWorth(summary.total_networth);
                 }
@@ -75,23 +86,25 @@ export default function TrackerPage() {
         return trackerData.filter(d => d.year === selectedYear);
     }, [trackerData, selectedYear]);
 
-    // Extract all unique platforms across ALL YEARS so structure persists for new years
+    // Preserve historical columns while immediately including newly registered platforms.
     const platforms = useMemo(() => {
-        if (!trackerData) return [];
-        const platformSet = new Set<string>();
-        // Check all historical data for platform names
-        trackerData.forEach(month => {
+        const platformSet = new Set<string>(registeredPlatforms);
+        trackerData?.forEach(month => {
             if (month.platform_breakdown) {
                 Object.keys(month.platform_breakdown).forEach(p => platformSet.add(p));
             }
         });
-        // Sort platforms: Cash last, others alphabetical
-        return Array.from(platformSet).sort((a, b) => {
-            if (a === 'Cash') return 1;
-            if (b === 'Cash') return -1;
-            return a.localeCompare(b);
-        });
-    }, [trackerData]); // Depend on all trackerData, not just yearData
+        return sortPlatformNames(Array.from(platformSet));
+    }, [registeredPlatforms, trackerData]);
+
+    // Activity entry should offer platforms that currently exist, rather than
+    // obsolete names retained only in historical tracker records.
+    const activityPlatforms = useMemo(() => {
+        const source = registeredPlatforms.length > 0 ? registeredPlatforms : platforms;
+        return sortPlatformNames(Array.from(new Set(source))).filter(
+            platform => platform.trim().toLowerCase() !== 'cash'
+        );
+    }, [platforms, registeredPlatforms]);
 
     // Helper to get value for a cell
     const getValue = (platform: string, month: string) => {
@@ -337,7 +350,7 @@ export default function TrackerPage() {
             </div>
 
             {/* Income vs Investment Section */}
-            <IncomeInvestmentTable platforms={platforms} />
+            <IncomeInvestmentTable platforms={activityPlatforms} />
         </div>
     );
 }
