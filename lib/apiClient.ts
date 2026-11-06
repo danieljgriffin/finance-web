@@ -139,6 +139,39 @@ export interface Goal {
     completed_date?: string;
 }
 
+export interface PlanItem {
+    name: string;
+    amount_pence: number;
+}
+
+export interface PlanAllocation {
+    platform: string;
+    amount_pence: number;
+    funds: PlannedInvestment[];
+}
+
+export interface PlannedInvestment extends PlanItem {
+    instrument?: InstrumentReference;
+}
+
+export interface InstrumentReference {
+    symbol: string;
+    isin?: string;
+    type?: string;
+    exchange?: string;
+    currency?: string;
+}
+
+export interface PlannedBill extends PlanItem {
+    frequency: 'monthly' | 'annual';
+}
+
+export interface FinancePlan {
+    take_home_monthly_pence: number;
+    bills: PlannedBill[];
+    allocations: PlanAllocation[];
+}
+
 export interface MonthlyTrackerData {
     // Define based on actual response, assuming list of monthly snapshots
     month: string;
@@ -342,6 +375,24 @@ class ApiClient {
     }
 
     // Cashflow (Income vs Investment)
+    async getFinancePlan() {
+        return this.request<FinancePlan | null>('/finance-plan');
+    }
+
+    async saveFinancePlan(plan: FinancePlan) {
+        return this.request<FinancePlan>('/finance-plan', {
+            method: 'PUT',
+            body: JSON.stringify(plan),
+        });
+    }
+
+    async recordPlannedPurchase(purchase: { platform: string; symbol: string; holdings: number; amount_spent: number }) {
+        return this.request<Investment>('/finance-plan/purchase', {
+            method: 'POST',
+            body: JSON.stringify(purchase),
+        });
+    }
+
     async getIncomeData() {
         return this.request<IncomeData[]>('/cashflow/income');
     }
@@ -390,8 +441,7 @@ export interface IncomeData {
     created_at?: string;
 }
 
-export interface SearchResult {
-    symbol: string;
+export interface SearchResult extends InstrumentReference {
     name: string;
     type: string;      // 'stock' | 'etf' | 'fund' | 'crypto' | 'index'
     exchange: string;

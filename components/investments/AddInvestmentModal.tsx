@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { api, Investment, SearchResult } from '@/lib/apiClient';
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { api, Investment, InstrumentReference, SearchResult } from '@/lib/apiClient';
 
 interface PlatformData {
     name: string;
@@ -15,11 +17,26 @@ interface AddInvestmentModalProps {
     platformsData?: PlatformData[];
 }
 
-type ViewState = 'selection' | 'manual' | 'trading212';
+type ViewState = 'selection' | 'manual' | 'trading212' | 'plan';
+type PlanChoice = { platform: string; name: string; amount_pence: number; instrument: InstrumentReference };
+const gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
 
 export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms, platformsData }: AddInvestmentModalProps) {
     const [view, setView] = useState<ViewState>('selection');
     const [isLoading, setIsLoading] = useState(false);
+    const submitLock = useRef(false);
+    const [plannedPurchase, setPlannedPurchase] = useState<PlanChoice | null>(null);
+    const [purchaseError, setPurchaseError] = useState('');
+    const plan = useQuery({
+        queryKey: ['financePlan'],
+        queryFn: () => api.getFinancePlan(),
+        enabled: isOpen,
+    });
+    const plannedChoices = (plan.data?.allocations ?? []).flatMap(({ platform, funds }) =>
+        existingPlatforms.includes(platform) ? funds.flatMap(({ name, amount_pence, instrument }) =>
+            instrument ? [{ platform, name, amount_pence, instrument }] : []
+        ) : []
+    );
 
     // Manual Form State
     const [platform, setPlatform] = useState('');
@@ -180,6 +197,8 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
         // Reset view after animation
         setTimeout(() => {
             setView('selection');
+            setPlannedPurchase(null);
+            setPurchaseError('');
             setSelectedExistingInvestment(null);
             setIsNewInvestment(false);
             setInvestmentSearch('');
@@ -192,12 +211,27 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
         }, 300);
     };
 
+    const startPlannedPurchase = (choice: PlanChoice) => {
+        const existing = platformsData?.find((account) => account.name === choice.platform)?.investments
+            .find((investment) => investment.symbol?.toUpperCase() === choice.instrument.symbol.toUpperCase());
+        setSelectedExistingInvestment(existing ?? null);
+        setPlannedPurchase(choice);
+        setHoldings('');
+        setAmount('');
+        setInputType('amount_spent');
+        setPurchaseError('');
+        setView('manual');
+    };
+
     const handleManualSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitLock.current) return;
+        submitLock.current = true;
+        setPurchaseError('');
         setIsLoading(true);
 
         try {
-            const finalPlatform = isNewPlatform ? newPlatformName : platform;
+            const finalPlatform = plannedPurchase?.platform ?? (isNewPlatform ? newPlatformName : platform);
             if (!finalPlatform) return;
 
             let amountSpent = 0;
@@ -215,7 +249,18 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
 
             const investmentName = selectedExistingInvestment ? selectedExistingInvestment.name : name;
 
-            await api.addInvestment({
+            if (plannedPurchase) {
+                if (!Number.isFinite(quantity) || !Number.isFinite(amountSpent) || quantity <= 0 || amountSpent <= 0) {
+                    setPurchaseError('Enter the units received and the amount you paid.');
+                    return;
+                }
+                await api.recordPlannedPurchase({
+                    platform: finalPlatform,
+                    symbol: plannedPurchase.instrument.symbol,
+                    holdings: quantity,
+                    amount_spent: amountSpent,
+                });
+            } else await api.addInvestment({
                 platform: finalPlatform,
                 name: investmentName,
                 holdings: quantity,
@@ -240,8 +285,13 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
             setShowMarketDropdown(false);
         } catch (err) {
             console.error(err);
-            alert('Failed to add investment');
+            if (plannedPurchase) {
+                setPurchaseError('Couldn’t record the purchase. Check the investment is still linked in your Finance plan and try again.');
+            } else {
+                alert('Failed to add investment');
+            }
         } finally {
+            submitLock.current = false;
             setIsLoading(false);
         }
     };
@@ -275,7 +325,7 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
 
     return (
         <Transition appear show={isOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-50" onClose={handleClose}>
+            <Dialog as="div" className="relative z-50" onClose={() => { if (!isLoading) handleClose(); }}>
                 <Transition.Child
                     as={Fragment}
                     enter="ease-out duration-300"
@@ -303,12 +353,18 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                 <Dialog.Title as="div" className="flex justify-between items-center mb-6">
                                     <h3 className="text-xl font-bold text-white">
                                         {view === 'selection' && 'Add Investment'}
-                                        {view === 'manual' && 'Add Manual Investment'}
+                                        {view === 'manual' && (plannedPurchase ? 'Record purchase' : 'Add Manual Investment')}
+                                        {view === 'plan' && 'From your plan'}
                                         {view === 'trading212' && 'Connect Trading 212'}
                                     </h3>
                                     {view !== 'selection' && (
                                         <button
-                                            onClick={() => setView('selection')}
+                                            disabled={isLoading}
+                                            onClick={() => {
+                                                setView(plannedPurchase ? 'plan' : 'selection');
+                                                if (plannedPurchase) setSelectedExistingInvestment(null);
+                                                setPlannedPurchase(null);
+                                            }}
                                             className="text-slate-400 hover:text-white text-sm"
                                         >
                                             Back
@@ -319,6 +375,12 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                 {view === 'selection' && (
                                     <div className="space-y-4">
                                         <p className="text-slate-400 text-sm mb-6">Choose how you&apos;d like to add investments:</p>
+
+                                        <button type="button" onClick={() => setView('plan')}
+                                            className="w-full rounded-xl border border-slate-700 p-4 text-left transition-colors hover:border-blue-500 hover:bg-slate-800">
+                                            <span className="block font-medium text-white">From your plan</span>
+                                            <span className="mt-1 block text-sm text-slate-400">Record a purchase using an investment you linked in your Finance plan</span>
+                                        </button>
 
                                         <button
                                             onClick={() => setView('manual')}
@@ -372,9 +434,39 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                     </div>
                                 )}
 
+                                {view === 'plan' && (
+                                    <div className="space-y-3">
+                                        {plan.isPending ? <p role="status" className="text-sm text-slate-400">Loading Finance plan…</p>
+                                            : plan.isError ? <p className="text-sm text-slate-400">
+                                                Couldn’t load the Finance plan. <button type="button" className="underline" onClick={() => void plan.refetch()}>Try again</button>
+                                            </p> : plannedChoices.length === 0 ? <p className="text-sm text-slate-400">
+                                                Use Find investment in your <Link href="/tracker/plan" className="text-blue-400 underline">Finance plan</Link> to link a fund on a Portfolio account.
+                                            </p> : <>
+                                                <p className="text-sm text-slate-400">Choose an investment you’ve already bought.</p>
+                                                <ul className="max-h-80 space-y-2 overflow-y-auto">
+                                                    {plannedChoices.map((choice, index) => <li key={index}>
+                                                        <button type="button" onClick={() => startPlannedPurchase(choice)}
+                                                            className="w-full rounded-lg border border-slate-700 px-3 py-2 text-left text-sm hover:bg-slate-800">
+                                                            <span className="block font-medium text-white">{choice.name}</span>
+                                                            <span className="block text-slate-400">
+                                                                {choice.platform} · {choice.instrument.isin ?? choice.instrument.symbol} · {gbp.format(choice.amount_pence / 100)}/month planned
+                                                            </span>
+                                                        </button>
+                                                    </li>)}
+                                                </ul>
+                                            </>}
+                                    </div>
+                                )}
+
                                 {view === 'manual' && (
                                     <form onSubmit={handleManualSubmit} className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
+                                        {plannedPurchase ? <div className="space-y-1 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                            <p className="font-medium text-white">{plannedPurchase.name}</p>
+                                            <p className="text-sm text-slate-400">
+                                                {plannedPurchase.platform} · {plannedPurchase.instrument.isin ?? plannedPurchase.instrument.symbol}
+                                            </p>
+                                            <p className="pt-1 text-xs text-slate-400">Enter the units and cost from your purchase confirmation. Your monthly plan stays in place.</p>
+                                        </div> : <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-xs font-medium text-slate-400 mb-1">Platform</label>
                                                 <select
@@ -600,14 +692,15 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                     </div>
                                                 )}
                                             </div>
-                                        </div>
+                                        </div>}
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-xs font-medium text-slate-400 mb-1">
-                                                    {selectedExistingInvestment ? 'New Shares to Add' : 'Holdings (Quantity)'}
+                                                <label htmlFor="purchase-quantity" className="block text-xs font-medium text-slate-400 mb-1">
+                                                    {plannedPurchase ? 'Units received' : selectedExistingInvestment ? 'New Shares to Add' : 'Holdings (Quantity)'}
                                                 </label>
                                                 <input
+                                                    id="purchase-quantity"
                                                     type="number"
                                                     step="any"
                                                     value={holdings}
@@ -631,10 +724,11 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-medium text-slate-400 mb-1">
+                                            <label htmlFor="purchase-cost" className="block text-xs font-medium text-slate-400 mb-1">
                                                 {inputType === 'amount_spent' ? 'Total Amount Spent (£)' : 'Average Buy Price (£)'}
                                             </label>
                                             <input
+                                                id="purchase-cost"
                                                 type="number"
                                                 step="any"
                                                 value={amount}
@@ -676,7 +770,7 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                             </div>
                                         )}
 
-                                        <div>
+                                        {!plannedPurchase && <div>
                                             <label className="block text-xs font-medium text-slate-400 mb-1">Symbol (Optional)</label>
                                             <input
                                                 type="text"
@@ -693,22 +787,24 @@ export function AddInvestmentModal({ isOpen, onClose, onSave, existingPlatforms,
                                                     ? 'Symbol auto-filled from search'
                                                     : 'Required for live price updates'}
                                             </p>
-                                        </div>
+                                        </div>}
 
+                                        {purchaseError && <p role="alert" className="text-sm text-rose-300">{purchaseError}</p>}
                                         <div className="flex justify-end gap-3 mt-6">
                                             <button
                                                 type="button"
                                                 onClick={handleClose}
+                                                disabled={isLoading}
                                                 className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
                                             >
                                                 Cancel
                                             </button>
                                             <button
                                                 type="submit"
-                                                disabled={isLoading || (!name && !selectedExistingInvestment)}
+                                                disabled={isLoading || (!plannedPurchase && !name && !selectedExistingInvestment)}
                                                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-500 transition-colors disabled:opacity-50"
                                             >
-                                                {isLoading ? 'Saving...' : selectedExistingInvestment ? 'Add to Investment' : 'Save'}
+                                                {isLoading ? 'Saving...' : plannedPurchase ? 'Record purchase' : selectedExistingInvestment ? 'Add to Investment' : 'Save'}
                                             </button>
                                         </div>
                                     </form>

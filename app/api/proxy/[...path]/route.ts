@@ -1,11 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { canAccessWeb, sameOrigin, usesLocalAccess } from "@/lib/webAccess";
 
-const BASE = process.env.FINANCE_API_BASE_URL;
-const TOKEN = process.env.PERSONAL_API_TOKEN;
 const LOCAL_DEMO_MODE = process.env.NEXT_PUBLIC_LOCAL_DEMO_MODE === "true";
 type ProxyContext = { params: Promise<{ path?: string[] }> };
 
-async function proxy(req: Request, ctx: ProxyContext) {
+async function proxy(req: NextRequest, ctx: ProxyContext) {
+    const cacheControl = { "Cache-Control": "private, no-store" };
+    if (!canAccessWeb(req)) {
+        return NextResponse.json({ error: "Sign in to Axiom Wealth." }, { status: 401, headers: cacheControl });
+    }
+    if (req.method !== "GET" && !usesLocalAccess() && !sameOrigin(req)) {
+        return NextResponse.json({ error: "Invalid request origin." }, { status: 403, headers: cacheControl });
+    }
+    const BASE = process.env.FINANCE_API_BASE_URL ?? (usesLocalAccess() ? "http://127.0.0.1:8000" : undefined);
+    const TOKEN = process.env.PERSONAL_API_TOKEN ?? (usesLocalAccess() ? "dev-token-123" : undefined);
     if (!BASE) {
         return NextResponse.json(
             { error: "Missing FINANCE_API_BASE_URL" },
@@ -64,6 +72,7 @@ async function proxy(req: Request, ctx: ProxyContext) {
         return new NextResponse(responseBody, {
             status: upstream.status,
             headers: {
+                ...cacheControl,
                 "content-type":
                     upstream.headers.get("content-type") ?? "application/json",
             },
@@ -74,18 +83,18 @@ async function proxy(req: Request, ctx: ProxyContext) {
     }
 }
 
-export async function GET(req: Request, ctx: ProxyContext) {
+export async function GET(req: NextRequest, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function POST(req: Request, ctx: ProxyContext) {
+export async function POST(req: NextRequest, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function PUT(req: Request, ctx: ProxyContext) {
+export async function PUT(req: NextRequest, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function PATCH(req: Request, ctx: ProxyContext) {
+export async function PATCH(req: NextRequest, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
-export async function DELETE(req: Request, ctx: ProxyContext) {
+export async function DELETE(req: NextRequest, ctx: ProxyContext) {
     return proxy(req, ctx);
 }
