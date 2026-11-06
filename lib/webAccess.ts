@@ -7,7 +7,7 @@ export const sessionOptions = {
     secure: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 7 * 24 * 60 * 60,
+    maxAge: 60 * 24 * 60 * 60,
 } as const;
 
 export function usesLocalAccess() {
