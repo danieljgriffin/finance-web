@@ -3,13 +3,11 @@
 import { FormEvent, Fragment, ReactNode, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, FinancePlan, Investment, InstrumentReference, PlannedBill, PlanItem } from '@/lib/apiClient';
+import { allocationMonthlyTotal, billAnnual, financeTotals } from '@/lib/financePlan';
 
 const pounds = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
 const percentage = new Intl.NumberFormat('en-GB', { style: 'percent', maximumFractionDigits: 1 });
 const money = (pence: number) => pounds.format(pence / 100);
-const total = (items: PlanItem[] | FinancePlan['allocations']) =>
-    items.reduce((sum, item) => sum + item.amount_pence, 0);
-const billAnnual = (bill: PlannedBill) => bill.amount_pence * (bill.frequency === 'monthly' ? 12 : 1);
 const emptyPlan: FinancePlan = { take_home_monthly_pence: 0, bills: [], allocations: [] };
 const input = 'min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white';
 const panel = 'rounded-xl border border-slate-800 bg-[#0B101B] p-4 sm:p-5';
@@ -17,13 +15,6 @@ const action = 'rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-whit
 const quiet = 'rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60';
 const numericCell = 'whitespace-nowrap py-3 pl-4 text-right tabular-nums';
 type PlanSection = 'pay' | 'bills' | 'investments';
-
-function financeTotals(plan: FinancePlan) {
-    const annualPay = plan.take_home_monthly_pence * 12;
-    const annualInvestments = total(plan.allocations) * 12;
-    const annualBills = plan.bills.reduce((sum, bill) => sum + billAnnual(bill), 0);
-    return { annualPay, annualInvestments, annualBills, annualFree: annualPay - annualBills - annualInvestments };
-}
 
 function platformOrder(platform: string) {
     if (/\b(crypto|coinbase|bitcoin)\b/i.test(platform)) return 2;
@@ -115,7 +106,7 @@ function PeriodCard({ label, annual, blank, highlight = false, children }: {
 }
 
 function Investments({ plan, onEdit }: { plan: FinancePlan; onEdit: () => void }) {
-    const invested = total(plan.allocations);
+    const invested = financeTotals(plan).annualInvestments / 12;
     const share = (amount: number) => invested > 0 ? percentage.format(amount / invested) : '—';
     const allocations = plan.allocations.slice().sort((a, b) => platformOrder(a.platform) - platformOrder(b.platform));
     return <section className={panel} aria-labelledby="planned-investments">
@@ -145,11 +136,11 @@ function Investments({ plan, onEdit }: { plan: FinancePlan; onEdit: () => void }
                         <InvestmentAmounts amount={invested} share={share(invested)} />
                     </tr>
                     {allocations.map((allocation) => {
-                        const unallocated = allocation.amount_pence - total(allocation.funds);
+                        const platformTotal = allocationMonthlyTotal(allocation);
                         return <Fragment key={allocation.platform}>
                             <tr className="border-t border-slate-800 font-semibold">
                                 <th scope="row" className="py-3 text-left">{allocation.platform}</th>
-                                <InvestmentAmounts amount={allocation.amount_pence} share={share(allocation.amount_pence)} />
+                                <InvestmentAmounts amount={platformTotal} share={share(platformTotal)} />
                             </tr>
                             {allocation.funds.map((fund, i) => <tr key={i} className="border-t border-slate-800/60 text-slate-300">
                                 <th scope="row" className="py-3 pl-4 text-left font-normal">
@@ -160,12 +151,6 @@ function Investments({ plan, onEdit }: { plan: FinancePlan; onEdit: () => void }
                                 </th>
                                 <InvestmentAmounts amount={fund.amount_pence} share={share(fund.amount_pence)} />
                             </tr>)}
-                            {allocation.funds.length > 0 && unallocated !== 0 && <tr>
-                                <td colSpan={4} className={`pb-3 pl-4 text-xs ${unallocated < 0 ? 'text-amber-300' : 'text-slate-400'}`}>
-                                    {unallocated < 0 ? `Listed purchases exceed the platform plan by ${money(-unallocated)} per month.`
-                                        : `${money(unallocated)} per month unallocated to investments on this platform.`}
-                                </td>
-                            </tr>}
                         </Fragment>;
                     })}
                 </tbody>
@@ -233,7 +218,7 @@ function PlanEditor({ section, initial, holdings, accountsLoading, onRetryAccoun
     const [pay, setPay] = useState(String(initial.take_home_monthly_pence / 100));
     const [bills, setBills] = useState<DraftBill[]>(initial.bills.map((bill) => ({ ...draftItem(bill), frequency: bill.frequency })));
     const [allocations, setAllocations] = useState<DraftAllocation[]>(initial.allocations.map((row) => ({
-        platform: row.platform, amount: String(row.amount_pence / 100),
+        platform: row.platform, amount: String(allocationMonthlyTotal(row) / 100),
         funds: row.funds.map((fund) => ({ ...draftItem(fund), instrument: fund.instrument })),
     })));
     const [saving, setSaving] = useState(false);
@@ -246,7 +231,8 @@ function PlanEditor({ section, initial, holdings, accountsLoading, onRetryAccoun
         pay: { take_home_monthly_pence: cents(pay) },
         bills: { bills: bills.map((bill) => ({ ...planItem(bill), frequency: bill.frequency })) },
         investments: { allocations: allocations.map((row) => ({
-            platform: row.platform.trim(), amount_pence: cents(row.amount),
+            platform: row.platform.trim(), amount_pence: row.funds.length > 0
+                ? row.funds.reduce((sum, fund) => sum + cents(fund.amount), 0) : cents(row.amount),
             funds: row.funds.map((fund) => ({ ...planItem(fund), instrument: fund.instrument })),
         })) },
     };
@@ -332,11 +318,19 @@ function PlanEditor({ section, initial, holdings, accountsLoading, onRetryAccoun
                             </option>)}
                         </select>
                     </label>
-                    <AmountField label="Monthly platform total (£)" value={row.amount} onChange={(amount) => replaceAllocation(index, { ...row, amount })} />
+                    {row.funds.length > 0 ? <div className="grid gap-1 text-sm">
+                        <span>Monthly platform total</span>
+                        <output className="px-3 py-2 font-semibold tabular-nums" aria-live="polite">
+                            {money(row.funds.reduce((sum, fund) => sum + cents(fund.amount), 0))}
+                        </output>
+                        <span className="text-xs text-slate-400">Calculated from investments below.</span>
+                    </div> : <AmountField label="Monthly platform total (£)" value={row.amount} onChange={(amount) => replaceAllocation(index, { ...row, amount })} />}
                     <button type="button" className={quiet} onClick={() => setAllocations(allocations.filter((_, i) => i !== index))}>Remove platform</button>
                 </div>
                 <FundEditor key={row.platform} items={row.funds} holdings={holdings[row.platform] ?? []}
-                    setItems={(funds) => replaceAllocation(index, { ...row, funds })} />
+                    setItems={(funds) => replaceAllocation(index, {
+                        ...row, funds, amount: String(funds.reduce((sum, fund) => sum + cents(fund.amount), 0) / 100),
+                    })} />
             </fieldset>)}
             <button type="button" className={quiet}
                 disabled={allocations.some((row) => !row.platform) || !platforms.some((platform) => !allocations.some((row) => row.platform === platform))}
